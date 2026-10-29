@@ -1,0 +1,3311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>LIFE — Super App Condominial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800;9..40,900&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:#0B0C14;min-height:100dvh}
+  #root{min-height:100dvh}
+  input,textarea,select,button{font-family:inherit}
+  @keyframes lifeShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  @keyframes lifeFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .fade{animation:lifeFade .22s ease}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(120,120,140,.35);border-radius:4px}
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
+
+/* ═════════════════ TOKENS ═════════════════ */
+const T = {
+  bg:"#F4F5FA", card:"#FFFFFF", ink:"#0F0E2A", text:"#1A1A2E", muted:"#6B7280",
+  border:"#E5E7EB", soft:"#F9FAFB",
+  accent:"#7C5CFC", accentD:"#5A3ECC", accentL:"#B8A9FD",
+  green:"#05C98A", orange:"#FF6B35", red:"#E53E3E",
+  yellow:"#F6C90E", pink:"#E84393", blue:"#0EA5E9",
+  mktGrad:"linear-gradient(135deg,#FF6B35,#E84393)",
+  facGrad:"linear-gradient(135deg,#7C5CFC,#05C98A)",
+  walletGrad:"linear-gradient(135deg,#7C5CFC,#4834d4)",
+  darkGrad:"linear-gradient(135deg,#0F0E2A,#1e1b4b)",
+  d:{ bg:"#0B0C14", s1:"#12131F", s2:"#1A1B2E", s3:"#21233A",
+      border:"rgba(255,255,255,.07)", border2:"rgba(255,255,255,.12)",
+      text:"#F0F0FF", muted:"#7B7D9E" },
+  font:"'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif",
+};
+const D = T.d;
+const SC = { PENDING_PAYMENT:"#F6C90E", PAID:"#05C98A", CONFIRMED:"#05C98A", PREPARING:"#0EA5E9",
+  IN_TRANSIT:"#7C5CFC", DELIVERED:"#05C98A", COMPLETED:"#05C98A", CANCELLED:"#9CA3AF",
+  REFUNDED:"#FF6B35", WITHDRAWN:"#FF6B35", OPEN:"#7C5CFC", OVERDUE:"#E53E3E",
+  UNDER_REVIEW:"#F6C90E", RESOLVED:"#05C98A", RECEIVED:"#7C5CFC", AVAILABLE:"#05C98A",
+  SCHEDULED:"#F6C90E", PICKED_UP:"#9CA3AF", PENDING:"#F6C90E", ACCEPTED:"#05C98A", REJECTED:"#E53E3E" };
+const SL = { PENDING_PAYMENT:"Aguardando pagamento", PAID:"Pago", CONFIRMED:"Confirmado",
+  PREPARING:"Em preparo", IN_TRANSIT:"A caminho", DELIVERED:"Entregue", COMPLETED:"Concluído",
+  CANCELLED:"Cancelado", REFUNDED:"Reembolsado", WITHDRAWN:"Desistência", OPEN:"Em aberto",
+  OVERDUE:"Em atraso", UNDER_REVIEW:"Em análise", RESOLVED:"Resolvida", RECEIVED:"Recebida",
+  AVAILABLE:"Disponível", SCHEDULED:"Agendada", PICKED_UP:"Retirada", PENDING:"Pendente",
+  ACCEPTED:"Aceita", REJECTED:"Recusada" };
+const MERIT = { BRONZE:{label:"Bronze",color:"#D97706",icon:"🔶"}, SILVER:{label:"Prata",color:"#9CA3AF",icon:"💠"}, GOLD:{label:"Ouro",color:"#F6C90E",icon:"💎"} };
+
+/* ═════════════════ NÚCLEO (espelho de lib/life-core.js) ═════════════════ */
+const LEGAL = {
+  controller:{ legalName:"LIFE Tecnologia Condominial LTDA", cnpj:"51.482.309/0001-74",
+    address:"SCS Quadra 2, Bloco C, Brasília/DF, CEP 70302-000" },
+  dpo:{ name:"Helena Barros Marques", credential:"OAB/DF 45.221", email:"dpo@lifeapp.com.br", phone:"(61) 3200-4000" },
+  sac:{ phone:"0800 730 4040", email:"sac@lifeapp.com.br", hours:"Seg a Sex, 8h às 20h", responseDays:7 },
+  policyVersion:"3.2.0", policyEffectiveDate:"2026-08-01",
+  deadlines:{ dsarDays:15, withdrawalDays:7, refundBusinessDays:10, serviceCancelHours:8,
+    accessLogMonths:6, fiscalRetentionYears:5, walletExpiryMonths:12 },
+  disclaimers:{
+    notAFinancialInstitution:"O LIFE não é instituição financeira e não realiza custódia de recursos. Todas as transações são processadas por instituição de pagamento autorizada pelo Banco Central do Brasil.",
+    walletNotCashable:"O saldo LifeWallet é crédito promocional de uso exclusivo no app. Não é dinheiro, não é sacável, não é transferível e não rende juros. Validade de 12 meses.",
+    marketplaceLiability:"O LIFE processa pagamentos e recebe comissão, respondendo solidariamente perante o consumidor nos termos do Código de Defesa do Consumidor.",
+    assemblyRequired:"A contratação da plataforma pelo condomínio depende de aprovação em assembleia geral (art. 1.348 do Código Civil; quórum de 2/3 conforme Lei 14.405/2022).",
+    swapNoMoney:"A Troca Amiga é permuta direta entre moradores, sem envolvimento financeiro e sem intermediação do LIFE.",
+  },
+};
+const CONSENT_PURPOSES = [
+  { id:"ESSENTIAL", label:"Dados essenciais da conta", legalRef:"Art. 7º, V — execução de contrato", required:true,
+    description:"Nome, e-mail, unidade e condomínio. Necessários para o app funcionar." },
+  { id:"BILLING", label:"Cobrança e pagamentos", legalRef:"Art. 7º, II — obrigação legal", required:true,
+    description:"Boletos e histórico financeiro. Exigido pela legislação condominial e fiscal." },
+  { id:"MARKETPLACE", label:"Histórico de compras e cashback", legalRef:"Art. 7º, I — consentimento", required:false,
+    description:"Usado para calcular cashback e exibir seu histórico de pedidos." },
+  { id:"SOCIAL", label:"Publicações no Feed e Chat", legalRef:"Art. 7º, I — consentimento", required:false,
+    description:"Fotos, textos e reações visíveis a outros moradores do condomínio." },
+  { id:"PROFILING", label:"Fofoca do Bem (perfilamento por IA)", legalRef:"Art. 7º, I + art. 20", required:false,
+    description:"Compara interesses entre moradores de forma anônima. Você pode pedir revisão humana.", automatedDecision:true },
+  { id:"MARKETING", label:"Comunicações promocionais", legalRef:"Art. 7º, I — consentimento", required:false,
+    description:"Ofertas de lojas e eventos por push e e-mail. Revogável a qualquer momento." },
+];
+const PROFILING_CRITERIA = [
+  { factor:"Categoria de compras", weight:.40 }, { factor:"Horários de uso de áreas comuns", weight:.25 },
+  { factor:"Tipos de evento participados", weight:.20 }, { factor:"Reações no Feed", weight:.15 },
+];
+const PROFILING_FORBIDDEN = ["raça","etnia","religião","orientação sexual","saúde","opinião política","filiação sindical","dados de menores"];
+const RETENTION_RULES = [
+  { entity:"Boletos", years:5, basis:"Art. 195 CTN — guarda de documentos fiscais" },
+  { entity:"Pagamentos", years:5, basis:"Art. 195 CTN / Lei 9.613 — prevenção à lavagem" },
+  { entity:"Pedidos", years:5, basis:"Art. 195 CTN — comprovação fiscal" },
+  { entity:"Registros de acesso", months:6, basis:"Art. 15 do Marco Civil da Internet" },
+  { entity:"Ocorrências", years:5, basis:"Arquivo do condomínio — art. 1.348 CC" },
+];
+const fmtBRL = (c) => new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format((c||0)/100);
+const toCents = (v) => Math.round(Number(v)*100);
+const pct = (c,p) => Math.round((c*Number(p))/100);
+function computeSplit({ subtotalCts, commissionPct=20, condoSharePct=10, cashbackPct=0, walletUsedCts=0 }) {
+  const grossCts = Math.max(0, subtotalCts);
+  const commissionCts = pct(grossCts, commissionPct);
+  const merchantNetCts = grossCts - commissionCts;
+  const condoShareCts = pct(commissionCts, condoSharePct);
+  const cashbackCts = pct(grossCts, cashbackPct);
+  const platformNetCts = commissionCts - condoShareCts - cashbackCts;
+  return { grossCts, commissionCts, merchantNetCts, condoShareCts, cashbackCts, platformNetCts,
+    walletUsedCts, chargeableCts: Math.max(0, grossCts - walletUsedCts),
+    balanced: merchantNetCts + commissionCts === grossCts };
+}
+function computeInstallments(amountCts, max=12, rate=.0199, free=3) {
+  const out=[];
+  for (let n=1;n<=max;n++){
+    if(n<=free){ const per=Math.floor(amountCts/n);
+      out.push({n,installmentCts:per,totalCts:amountCts,label:`${n}x de ${fmtBRL(per)} sem juros`}); }
+    else { const f=(rate*Math.pow(1+rate,n))/(Math.pow(1+rate,n)-1);
+      const inst=Math.round(amountCts*f);
+      out.push({n,installmentCts:inst,totalCts:inst*n,label:`${n}x de ${fmtBRL(inst)} (total ${fmtBRL(inst*n)})`}); }
+  }
+  return out;
+}
+const digits = (s) => String(s||"").replace(/\D/g,"");
+function isValidCPF(v){ const c=digits(v); if(c.length!==11||/^(\d)\1{10}$/.test(c))return false;
+  const calc=(len)=>{let s=0;for(let i=0;i<len;i++)s+=parseInt(c[i])*(len+1-i);const d=(s*10)%11;return d===10?0:d;};
+  return calc(9)===parseInt(c[9])&&calc(10)===parseInt(c[10]); }
+function isValidCNPJ(v){ const c=digits(v); if(c.length!==14||/^(\d)\1{13}$/.test(c))return false;
+  const calc=(len)=>{const w=len===12?[5,4,3,2,9,8,7,6,5,4,3,2]:[6,5,4,3,2,9,8,7,6,5,4,3,2];
+    let s=0;for(let i=0;i<len;i++)s+=parseInt(c[i])*w[i];const r=s%11;return r<2?0:11-r;};
+  return calc(12)===parseInt(c[12])&&calc(13)===parseInt(c[13]); }
+const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v||"").trim());
+const maskCPF = (v) => digits(v).slice(0,11).replace(/^(\d{3})(\d{0,3})(\d{0,3})(\d{0,2})/,(_,a,b,c,d)=>[a,b,c].filter(Boolean).join(".")+(d?"-"+d:""));
+const maskCNPJ = (v) => digits(v).slice(0,14).replace(/^(\d{2})(\d{0,3})(\d{0,3})(\d{0,4})(\d{0,2})/,(_,a,b,c,d,e)=>[a,b,c].filter(Boolean).join(".")+(d?"/"+d:"")+(e?"-"+e:""));
+const maskCEP = (v) => digits(v).slice(0,8).replace(/^(\d{5})(\d{0,3})/,(_,a,b)=>b?`${a}-${b}`:a);
+const BRANDS = [
+  { brand:"ELO", label:"Elo", re:/^(4011(78|79)|43(1274|8935)|45(1416|7393)|50(4175|6699)|627780|63(6297|6368)|65165[2-9]|6516[6-7]\d)/ },
+  { brand:"HIPERCARD", label:"Hipercard", re:/^(606282|38410|38414|38416)/ },
+  { brand:"VISA", label:"Visa", re:/^4/ },
+  { brand:"MASTERCARD", label:"Mastercard", re:/^(5[1-5]|2(2[2-9]|[3-6]\d|7[01]|720))/ },
+  { brand:"AMEX", label:"American Express", re:/^3[47]/ },
+  { brand:"DINERS", label:"Diners Club", re:/^3(0[0-5]|[68])/ },
+];
+const detectCardBrand = (n) => { const d=digits(n); for(const b of BRANDS) if(b.re.test(d)) return b;
+  return { brand:"UNKNOWN", label:"" }; };
+function luhn(n){ const d=digits(n); if(d.length<13||d.length>19)return false;
+  let s=0,db=false; for(let i=d.length-1;i>=0;i--){let x=parseInt(d[i]);if(db){x*=2;if(x>9)x-=9;}s+=x;db=!db;} return s%10===0; }
+function validateCard({number,holder,expMonth,expYear,cvv}){
+  const e={}; const n=digits(number); const {brand}=detectCardBrand(n);
+  if(!luhn(n)) e.number="Número de cartão inválido";
+  else if(brand==="UNKNOWN") e.number="Bandeira não aceita";
+  if(!holder||holder.trim().split(/\s+/).length<2) e.holder="Informe nome e sobrenome como no cartão";
+  const m=parseInt(expMonth), y=parseInt(expYear)<100?2000+parseInt(expYear):parseInt(expYear);
+  const now=new Date();
+  if(!(m>=1&&m<=12)) e.expMonth="Mês inválido";
+  else if(y<now.getFullYear()||(y===now.getFullYear()&&m<now.getMonth()+1)) e.expiry="Cartão vencido";
+  if(digits(cvv).length!==(brand==="AMEX"?4:3)) e.cvv=`CVV deve ter ${brand==="AMEX"?4:3} dígitos`;
+  return { valid:Object.keys(e).length===0, errors:e, brand };
+}
+const maskCard = (v) => digits(v).slice(0,19).replace(/(\d{4})(?=\d)/g,"$1 ").trim();
+const protocolOf = (p) => `${p}-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
+function withdrawalWindow(deliveredAt){
+  const dl = new Date(new Date(deliveredAt).getTime() + LEGAL.deadlines.withdrawalDays*864e5);
+  const rem = dl - new Date();
+  return { eligible: rem>0, deadline: dl, remainingDays: Math.max(0, Math.ceil(rem/864e5)) };
+}
+
+/* ═════════════════ DADOS DE DEMONSTRAÇÃO ═════════════════ */
+const DEMO_USERS = {
+  RESIDENT:{ id:"u1", fullName:"Lucas Ferreira", email:"lucas@email.com", role:"RESIDENT",
+    unit:"Apto 304 — Bloco B", condominiumName:"Residencial Alto das Flores",
+    meritTier:"GOLD", meritPoints:820, walletCts:4750 },
+  MANAGER:{ id:"u2", fullName:"Ricardo Alves", email:"ricardo@email.com", role:"MANAGER",
+    unit:"Administração", condominiumName:"Residencial Alto das Flores",
+    meritTier:"GOLD", mandate:"Mandato até 12/2026 — ata de 15/12/2024", walletCts:0 },
+  PLATFORM_ADMIN:{ id:"u3", fullName:"Mariana Vida", email:"mariana@lifeapp.com.br", role:"PLATFORM_ADMIN",
+    unit:"LIFE HQ", condominiumName:"Plataforma", meritTier:"GOLD", walletCts:0 },
+  MERCHANT:{ id:"u4", fullName:"Pizzaria do Zé", email:"ze@pizzaria.com", role:"MERCHANT",
+    unit:"Bloco Comercial, Loja 4", condominiumName:"Residencial Alto das Flores",
+    meritTier:"SILVER", walletCts:0 },
+};
+
+const CONDOMINIUMS = [
+  { id:"c1", name:"Residencial Alto das Flores", cnpj:"04.221.887/0001-30", cidade:"São Paulo", uf:"SP",
+    bairro:"Jardins", unitsTotal:120, users:98, gmvCts:2400000, inadimp:12.5, plan:"PRO",
+    contractStatus:"ACTIVE", assemblyDate:"2025-03-18", assemblyQuorum:"2/3 — 86 de 120", stores:4 },
+  { id:"c2", name:"Solar das Palmeiras", cnpj:"11.908.334/0001-77", cidade:"São Paulo", uf:"SP",
+    bairro:"Moema", unitsTotal:80, users:62, gmvCts:1800000, inadimp:8.2, plan:"STARTER",
+    contractStatus:"ACTIVE", assemblyDate:"2025-06-02", assemblyQuorum:"2/3 — 58 de 80", stores:3 },
+  { id:"c3", name:"Parque Imperial", cnpj:"22.447.019/0001-05", cidade:"Rio de Janeiro", uf:"RJ",
+    bairro:"Leblon", unitsTotal:200, users:152, gmvCts:3800000, inadimp:5.1, plan:"ENTERPRISE",
+    contractStatus:"ACTIVE", assemblyDate:"2026-01-11", assemblyQuorum:"2/3 — 142 de 200", stores:8 },
+  { id:"c4", name:"Vila dos Ipês", cnpj:"33.551.280/0001-61", cidade:"Brasília", uf:"DF",
+    bairro:"Sudoeste", unitsTotal:64, users:0, gmvCts:0, inadimp:0, plan:"STARTER",
+    contractStatus:"PENDING_ASSEMBLY", assemblyDate:null, assemblyQuorum:null, stores:0 },
+];
+
+const MERCHANTS = [
+  { id:"m1", tradeName:"Pizzaria do Zé", legalName:"Zé Alimentos LTDA ME", cnpj:"32.114.556/0001-90",
+    category:"RESTAURANT", channel:"INTERNAL", logoUrl:"🍕", bannerColor:"#FF6B35", rating:4.8,
+    reviewCount:127, etaMinutes:30, cashbackPct:5, commissionPct:20,
+    addressFull:"Bloco Comercial, Loja 4 — Alto das Flores, São Paulo/SP", sacPhone:"(11) 3555-2020",
+    sacEmail:"sac@pizzariadoze.com.br", technicalResp:null,
+    products:[
+      { id:"p1", name:"Pizza Margherita", description:"Molho de tomate, mussarela de búfala e manjericão", imageUrl:"🍕",
+        priceCts:4500, discountPct:8, cashbackPct:5, withdrawalEligible:false,
+        addons:[{id:"a1",name:"Borda recheada",priceCts:800},{id:"a2",name:"Queijo extra",priceCts:500}] },
+      { id:"p2", name:"Pizza Calabresa", description:"Calabresa artesanal, cebola roxa e azeitona", imageUrl:"🍕",
+        priceCts:4800, discountPct:5, cashbackPct:5, withdrawalEligible:false,
+        addons:[{id:"a1",name:"Borda recheada",priceCts:800}] },
+      { id:"p3", name:"Refrigerante 2L", description:"Coca-Cola, Guaraná ou Suco natural", imageUrl:"🥤",
+        priceCts:1200, discountPct:0, cashbackPct:5, withdrawalEligible:true, addons:[] },
+    ]},
+  { id:"m2", tradeName:"Pet Shop Amigo Fiel", legalName:"Amigo Fiel Pet Comércio LTDA", cnpj:"28.907.441/0001-15",
+    category:"PET", channel:"INTERNAL", logoUrl:"🐾", bannerColor:"#9B59B6", rating:4.9,
+    reviewCount:89, etaMinutes:25, cashbackPct:8, commissionPct:20,
+    addressFull:"Bloco Comercial, Loja 2 — Alto das Flores, São Paulo/SP", sacPhone:"(11) 3555-3030",
+    sacEmail:"sac@amigofiel.com.br", technicalResp:"Dra. Rita Campos — CRMV/SP 31.204",
+    products:[
+      { id:"p4", name:"Ração Premium 1kg", description:"Golden, Premier ou Royal Canin", imageUrl:"🐶",
+        priceCts:6200, discountPct:10, cashbackPct:8, withdrawalEligible:true, addons:[] },
+      { id:"p5", name:"Shampoo Pet 500ml", description:"Hipoalergênico, sem sal", imageUrl:"🛁",
+        priceCts:2800, discountPct:0, cashbackPct:8, withdrawalEligible:true, addons:[] },
+    ]},
+  { id:"m3", tradeName:"Farmácia São João", legalName:"Drogaria São João S.A.", cnpj:"61.585.865/0001-51",
+    category:"PHARMACY", channel:"EXPRESS", logoUrl:"💊", bannerColor:"#E53E3E", rating:4.8,
+    reviewCount:312, etaMinutes:20, cashbackPct:4, commissionPct:20,
+    addressFull:"R. Augusta, 1200 — Jardins, São Paulo/SP", sacPhone:"0800 771 4040",
+    sacEmail:"sac@saojoao.com.br", technicalResp:"Dr. Paulo Reis — CRF/SP 42.881",
+    products:[
+      { id:"p6", name:"Dipirona 500mg (10cp)", description:"Genérico — venda sob orientação farmacêutica", imageUrl:"💊",
+        priceCts:1250, discountPct:0, cashbackPct:4, withdrawalEligible:true, requiresPrescription:true, addons:[] },
+      { id:"p7", name:"Protetor Solar FPS60", description:"La Roche-Posay 50ml", imageUrl:"☀️",
+        priceCts:6800, discountPct:15, cashbackPct:4, withdrawalEligible:true, addons:[] },
+    ]},
+  { id:"m4", tradeName:"Açaí do Bairro", legalName:"Açaí do Bairro Comércio ME", cnpj:"44.102.556/0001-08",
+    category:"GROCERY", channel:"EXPRESS", logoUrl:"🍇", bannerColor:"#7C3AED", rating:4.9,
+    reviewCount:198, etaMinutes:25, cashbackPct:6, commissionPct:20,
+    addressFull:"R. Joaquim Floriano, 88 — Itaim, São Paulo/SP", sacPhone:"(11) 3555-7070",
+    sacEmail:"contato@acaidobairro.com.br", technicalResp:null,
+    products:[
+      { id:"p8", name:"Açaí 500ml", description:"Com granola, banana e mel", imageUrl:"🍇",
+        priceCts:3500, discountPct:5, cashbackPct:6, withdrawalEligible:false,
+        addons:[{id:"a3",name:"Leite condensado",priceCts:300},{id:"a4",name:"Morango",priceCts:400},{id:"a5",name:"Nutella",priceCts:600}] },
+    ]},
+];
+
+const INVOICES = [
+  { id:"i1", description:"Condomínio — Outubro/2026", amountCts:85000, dueDate:"2026-11-10",
+    status:"OPEN", unit:{number:"304-B"}, legalBasis:"Art. 1.336, I do Código Civil — rateio por fração ideal", assemblyRef:null },
+  { id:"i2", description:"Taxa Extra — Reforma do Hall", amountCts:32000, dueDate:"2026-10-15",
+    status:"OVERDUE", unit:{number:"304-B"}, legalBasis:"Deliberação de assembleia geral — art. 1.348 CC", assemblyRef:"AGE de 20/08/2026 — quórum 2/3" },
+  { id:"i3", description:"Condomínio — Setembro/2026", amountCts:85000, dueDate:"2026-10-10",
+    status:"PAID", unit:{number:"304-B"}, legalBasis:"Art. 1.336, I do Código Civil — rateio por fração ideal", assemblyRef:null },
+  { id:"i4", description:"Fundo de Reserva — 4º trimestre", amountCts:20000, dueDate:"2026-11-20",
+    status:"OPEN", unit:{number:"304-B"}, legalBasis:"Previsto na Convenção, art. 22", assemblyRef:"AGO de 15/03/2026" },
+];
+
+const WALLET_ENTRIES = [
+  { id:"w1", direction:"CREDIT", amountCts:260, reason:"Cashback do pedido PED-20261024-A3F2K",
+    createdAt:"2026-10-24", expiresAt:"2027-10-24" },
+  { id:"w2", direction:"DEBIT", amountCts:1500, reason:"Pagamento do pedido PED-20261018-M9X1P", createdAt:"2026-10-18" },
+  { id:"w3", direction:"CREDIT", amountCts:496, reason:"Cashback do pedido PED-20261012-K4L8S",
+    createdAt:"2026-10-12", expiresAt:"2027-10-12" },
+  { id:"w4", direction:"CREDIT", amountCts:255, reason:"Cashback do evento Show Acústico",
+    createdAt:"2026-10-05", expiresAt:"2027-10-05" },
+];
+
+const ORDERS = [
+  { id:"o1", reference:"PED-20261024-A3F2K", status:"DELIVERED", grossCts:5200, commissionCts:1040,
+    merchantNetCts:4160, condoShareCts:104, cashbackCts:260, deliveredAt:"2026-10-24",
+    merchant:{tradeName:"Pizzaria do Zé"}, user:{fullName:"Lucas Ferreira"}, withdrawalEligible:false },
+  { id:"o2", reference:"PED-20261026-B7H3L", status:"DELIVERED", grossCts:6200, commissionCts:1240,
+    merchantNetCts:4960, condoShareCts:124, cashbackCts:496, deliveredAt:"2026-10-26",
+    merchant:{tradeName:"Pet Shop Amigo Fiel"}, user:{fullName:"Lucas Ferreira"}, withdrawalEligible:true },
+  { id:"o3", reference:"PED-20261027-C2N8Q", status:"CONFIRMED", grossCts:3500, commissionCts:700,
+    merchantNetCts:2800, condoShareCts:70, cashbackCts:210, deliveredAt:null,
+    merchant:{tradeName:"Açaí do Bairro"}, user:{fullName:"Ana Costa"}, withdrawalEligible:false },
+  { id:"o4", reference:"PED-20261027-D5R1T", status:"PREPARING", grossCts:9000, commissionCts:1800,
+    merchantNetCts:7200, condoShareCts:180, cashbackCts:450, deliveredAt:null,
+    merchant:{tradeName:"Pizzaria do Zé"}, user:{fullName:"Pedro Lima"}, withdrawalEligible:false },
+];
+
+const POSTS = [
+  { id:"s1", body:"O jardim ficou incrível depois da reforma! 🌿 Parabéns a todos que ajudaram.",
+    mediaUrls:["🌳"], user:{fullName:"Ana Costa"}, unit:"Apto 102", timeAgo:"2 h",
+    reactions:{"❤️":12,"🌟":8,"🐾":5}, status:"PUBLISHED", reported:false },
+  { id:"s2", body:"Apresentando o Thor! 🐶 Chegou essa semana, quem quiser conhecer é só chamar.",
+    mediaUrls:["🐕"], user:{fullName:"Pedro Lima"}, unit:"Apto 215", timeAgo:"5 h",
+    reactions:{"❤️":28,"🐾":19,"😂":4}, status:"PUBLISHED", reported:false },
+  { id:"s3", body:"Vista da varanda no fim de tarde. Vale cada centavo morar aqui 🏙️",
+    mediaUrls:["☀️"], user:{fullName:"Julia Ramos"}, unit:"Apto 401", timeAgo:"1 d",
+    reactions:{"❤️":44,"😮":8,"🌟":15}, status:"PUBLISHED", reported:false },
+  { id:"s4", body:"Alguém sabe informar sobre a obra do elevador? Já são três semanas.",
+    mediaUrls:[], user:{fullName:"Carla Dias"}, unit:"Apto 302", timeAgo:"2 d",
+    reactions:{"❤️":6,"😮":11}, status:"PUBLISHED", reported:false },
+];
+
+const MESSAGES = [
+  { id:"g1", body:"Piscina fechada amanhã para manutenção, das 8h às 18h.", user:{fullName:"Síndico Ricardo"}, mine:false, time:"09:15" },
+  { id:"g2", body:"Obrigada pelo aviso! E as obras do hall, alguma previsão?", user:{fullName:"Ana Costa"}, mine:false, time:"09:22" },
+  { id:"g3", body:"Quando fica pronta a academia? 🏋️", user:{fullName:"Lucas Ferreira"}, mine:true, time:"10:01" },
+  { id:"g4", body:"Academia em 15 dias, já confirmamos com a empresa.", user:{fullName:"Síndico Ricardo"}, mine:false, time:"10:05" },
+  { id:"g5", body:"Churrasqueira livre no fim de semana?", user:{fullName:"Pedro Lima"}, mine:false, time:"10:30" },
+];
+
+const SWAP_ITEMS = [
+  { id:"t1", title:"iPod Nano 7ª geração", description:"Funcionando perfeitamente. Acompanha fone original e cabo.",
+    emoji:"🎵", user:{fullName:"Pedro Lima"}, unit:"Apto 215", mine:false,
+    offers:[{id:"of1",user:{fullName:"Ana Costa"},title:"Tablet Samsung 7\"",emoji:"📱",description:"Em ótimo estado, carregador incluso.",message:"Quero muito esse iPod!",status:"PENDING"}] },
+  { id:"t2", title:"Bicicleta aro 26 Caloi", description:"Azul, pneus novos, freios revisados.",
+    emoji:"🚲", user:{fullName:"Julia Ramos"}, unit:"Apto 401", mine:false, offers:[] },
+  { id:"t3", title:"Coleção Harry Potter (7 livros)", description:"Edição capa dura, excelente estado.",
+    emoji:"📚", user:{fullName:"Lucas Ferreira"}, unit:"Apto 304", mine:true,
+    offers:[{id:"of2",user:{fullName:"Carla Dias"},title:"Air Fryer 4L",emoji:"⚡",description:"Usada três vezes, na caixa.",message:"Topa trocar?",status:"PENDING"}] },
+];
+
+const REPORTS = [
+  { id:"r1", protocol:"MOD-20261027-X8K2L", reason:"HARASSMENT", status:"RECEIVED", createdAt:"2026-10-27",
+    reporter:{fullName:"Ana Costa"}, post:{body:"Comentário ofensivo direcionado a morador do bloco A"} },
+  { id:"r2", protocol:"MOD-20261026-P3M9N", reason:"SPAM", status:"RECEIVED", createdAt:"2026-10-26",
+    reporter:{fullName:"Pedro Lima"}, post:{body:"Divulgação repetida de produto externo no feed"} },
+];
+
+const DSAR = [
+  { id:"d1", protocol:"TIT-20261025-K2L9P", type:"PORTABILITY", status:"COMPLETED", dueAt:"2026-11-09", user:"Ana Costa" },
+  { id:"d2", protocol:"TIT-20261027-M7X3Q", type:"DELETION", status:"RECEIVED", dueAt:"2026-11-11", user:"Marcos Teixeira" },
+  { id:"d3", protocol:"REV-20261028-T4B8R", type:"AUTOMATED_REVIEW", status:"IN_PROGRESS", dueAt:"2026-11-12", user:"Julia Ramos" },
+];
+
+const REVENUE_SERIES = [
+  { l:"Mai", v:210000 }, { l:"Jun", v:280000 }, { l:"Jul", v:235000 },
+  { l:"Ago", v:310000 }, { l:"Set", v:290000 }, { l:"Out", v:482000, hi:true },
+];
+
+/* ═════════════════ CONTEXTO ═════════════════ */
+const LifeCtx = createContext(null);
+const useLife = () => useContext(LifeCtx);
+
+function LifeProvider({ children }) {
+  const [session, setSession] = useState(null);
+  const [consents, setConsents] = useState({ MARKETPLACE:true, SOCIAL:true, PROFILING:false, MARKETING:false });
+  const [cart, setCart] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [walletCts, setWalletCts] = useState(4750);
+  const [orders, setOrders] = useState(ORDERS);
+  const [posts, setPosts] = useState(POSTS);
+  const [reports, setReports] = useState(REPORTS);
+
+  const notify = useCallback((message, tone="info") => setToast({ message, tone }), []);
+  const login = useCallback((role) => setSession(DEMO_USERS[role] || DEMO_USERS.RESIDENT), []);
+  const logout = useCallback(() => { setSession(null); setCart([]); }, []);
+  const setConsent = useCallback((p, v) => setConsents(c => ({ ...c, [p]:v })), []);
+  const allows = useCallback((p) => {
+    const def = CONSENT_PURPOSES.find(x => x.id === p);
+    return def?.required ? true : consents[p] === true;
+  }, [consents]);
+
+  const addToCart = useCallback((product, { quantity=1, addonIds=[], merchant }) => {
+    const key = `${product.id}:${[...addonIds].sort().join(",")}`;
+    setCart(prev => {
+      const found = prev.find(i => i.key === key);
+      if (found) return prev.map(i => i.key===key ? {...i, quantity:i.quantity+quantity} : i);
+      const addons = (product.addons||[]).filter(a => addonIds.includes(a.id));
+      const unitCts = Math.round(product.priceCts * (1 - (product.discountPct||0)/100));
+      return [...prev, { key, productId:product.id, merchantId:merchant.id, merchant,
+        name:product.name, imageUrl:product.imageUrl, quantity, addons, unitCts,
+        addonsCts: addons.reduce((s,a)=>s+a.priceCts,0), cashbackPct:product.cashbackPct||0,
+        withdrawalEligible: product.withdrawalEligible !== false }];
+    });
+  }, []);
+  const updateQty = useCallback((key, q) =>
+    setCart(prev => q<=0 ? prev.filter(i=>i.key!==key) : prev.map(i=>i.key===key?{...i,quantity:q}:i)), []);
+  const clearCart = useCallback(() => setCart([]), []);
+
+  const cartTotals = useMemo(() => {
+    const subtotalCts = cart.reduce((s,i)=>s+(i.unitCts+i.addonsCts)*i.quantity, 0);
+    const cashbackCts = cart.reduce((s,i)=>s+Math.round((i.unitCts+i.addonsCts)*i.quantity*i.cashbackPct/100), 0);
+    return { subtotalCts, cashbackCts, count: cart.reduce((s,i)=>s+i.quantity,0),
+      merchant: cart[0]?.merchant || null,
+      mixed: cart.some(i => i.merchantId !== cart[0]?.merchantId),
+      allWithdrawable: cart.every(i => i.withdrawalEligible) };
+  }, [cart]);
+
+  const value = { session, user:session, role:session?.role, login, logout,
+    consents, setConsent, allows, purposes:CONSENT_PURPOSES,
+    cart, addToCart, updateQty, clearCart, cartTotals,
+    walletCts, setWalletCts, orders, setOrders, posts, setPosts, reports, setReports,
+    toast, notify, dismissToast:()=>setToast(null) };
+
+  return <LifeCtx.Provider value={value}>{children}</LifeCtx.Provider>;
+}
+
+function useBreakpoint() {
+  const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+  useEffect(() => { const h=()=>setW(window.innerWidth); window.addEventListener("resize",h); return ()=>window.removeEventListener("resize",h); }, []);
+  return { width:w, isMobile:w<768, isTablet:w>=768&&w<1100, isDesktop:w>=1100 };
+}
+
+function useAction(fn) {
+  const [loading, setLoading] = useState(false);
+  const execute = useCallback(async (...a) => {
+    if (loading) return;
+    setLoading(true);
+    try { await new Promise(r=>setTimeout(r,520)); return await fn(...a); }
+    finally { setLoading(false); }
+  }, [fn, loading]);
+  return { execute, loading };
+}
+
+/* ═════════════════ PRIMITIVOS MOBILE ═════════════════ */
+const Avatar = ({ name="?", size=36, color=T.accent, style={} }) => {
+  const i = String(name).split(" ").filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+  return <div style={{width:size,height:size,borderRadius:"50%",background:color,display:"flex",
+    alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,
+    fontSize:Math.max(9,size*.34),flexShrink:0,...style}}>{i}</div>;
+};
+const Badge = ({ children, status, color, style={} }) => {
+  const c = color || SC[status] || T.accent;
+  return <span style={{background:c+"22",color:c,borderRadius:20,padding:"3px 10px",fontSize:11,
+    fontWeight:700,whiteSpace:"nowrap",...style}}>{children || SL[status] || status}</span>;
+};
+const Card = ({ children, onClick, highlight, style={} }) => (
+  <div onClick={onClick} style={{background:T.card,borderRadius:18,padding:16,marginBottom:10,
+    boxShadow:highlight?`0 4px 20px ${T.accent}25`:"0 2px 12px rgba(0,0,0,.05)",
+    border:highlight?`1.5px solid ${T.accent}44`:"none",cursor:onClick?"pointer":"default",...style}}>{children}</div>
+);
+const Button = ({ children, onClick, variant="primary", disabled, loading, style={} }) => {
+  const v = { primary:{background:T.accent,color:"#fff"},
+    ghost:{background:"transparent",color:T.text,border:`1.5px solid ${T.border}`},
+    soft:{background:T.soft,color:T.text,border:`1px solid ${T.border}`},
+    green:{background:T.green,color:"#fff"}, red:{background:T.red,color:"#fff"} }[variant] || {};
+  return <button onClick={onClick} disabled={disabled||loading} style={{width:"100%",border:"none",
+    borderRadius:14,padding:"13px 18px",fontWeight:700,fontSize:14,marginBottom:8,
+    cursor:(disabled||loading)?"not-allowed":"pointer",opacity:(disabled||loading)?.55:1,...v,...style}}>
+    {loading ? "Aguarde…" : children}</button>;
+};
+const TopBar = ({ title, onBack, onHome, right }) => (
+  <div style={{background:T.card,padding:"11px 14px 9px",display:"flex",alignItems:"center",gap:8,
+    borderBottom:`1px solid ${T.border}`,flexShrink:0,position:"sticky",top:0,zIndex:20}}>
+    {onBack && <button onClick={onBack} style={{background:T.soft,border:`1px solid ${T.border}`,
+      borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:20,flexShrink:0}}>‹</button>}
+    <p style={{fontWeight:800,fontSize:16,margin:0,flex:1,color:T.text}}>{title}</p>
+    {onHome && <button onClick={onHome} style={{background:T.soft,border:`1px solid ${T.border}`,
+      borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:15,flexShrink:0}}>🏠</button>}
+    {right}
+  </div>
+);
+const Scroll = ({ children, padded=true }) => (
+  <div className="fade" style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",
+    ...(padded?{padding:"12px 14px 24px"}:{})}}>{children}</div>
+);
+const Heading = ({ children, sub }) => (
+  <div style={{margin:"14px 0 8px"}}>
+    <p style={{fontWeight:800,fontSize:16,color:T.text,margin:0}}>{children}</p>
+    {sub && <p style={{fontSize:12,color:T.muted,margin:"2px 0 0"}}>{sub}</p>}
+  </div>
+);
+const Field = ({ label, error, children }) => (
+  <div style={{marginBottom:12}}>
+    {label && <p style={{fontSize:12,fontWeight:600,color:T.muted,margin:"0 0 6px"}}>{label}</p>}
+    {children}
+    {error && <p style={{fontSize:12,color:T.red,margin:"5px 0 0"}}>{error}</p>}
+  </div>
+);
+const Input = ({ error, style={}, ...p }) => (
+  <input {...p} style={{width:"100%",padding:"12px 14px",borderRadius:12,
+    border:`1.5px solid ${error?T.red:T.border}`,fontSize:15,boxSizing:"border-box",
+    outline:"none",background:T.card,...style}}/>
+);
+const Divider = () => <div style={{height:1,background:T.border,margin:"10px 0"}}/>;
+const Money = ({ cts, size=16, color=T.text, strike }) => (
+  <span style={{fontSize:size,fontWeight:strike?500:800,color:strike?T.muted:color,
+    textDecoration:strike?"line-through":"none"}}>{fmtBRL(cts)}</span>
+);
+const LegalNote = ({ children, icon="⚖️", color=T.accent }) => (
+  <div style={{background:color+"0D",border:`1px solid ${color}33`,borderRadius:12,
+    padding:"10px 12px",marginBottom:10,display:"flex",gap:10}}>
+    <span style={{fontSize:15,flexShrink:0,lineHeight:1.3}}>{icon}</span>
+    <p style={{fontSize:11.5,color:T.text,margin:0,lineHeight:1.55}}>{children}</p>
+  </div>
+);
+const Empty = ({ icon="📭", title, sub, action }) => (
+  <div style={{textAlign:"center",padding:"48px 20px"}}>
+    <div style={{fontSize:52,marginBottom:14}}>{icon}</div>
+    <p style={{fontWeight:700,fontSize:17,color:T.text,margin:"0 0 6px"}}>{title}</p>
+    {sub && <p style={{fontSize:13.5,color:T.muted,margin:"0 0 18px",lineHeight:1.5}}>{sub}</p>}
+    {action}
+  </div>
+);
+const Sheet = ({ open, onClose, title, children }) => {
+  if (!open) return null;
+  return <div onClick={e=>e.target===e.currentTarget&&onClose?.()} style={{position:"absolute",
+    inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"flex-end",zIndex:400}}>
+    <div className="fade" style={{background:T.card,borderRadius:"22px 22px 0 0",padding:"22px 18px 26px",
+      width:"100%",maxHeight:"85%",overflowY:"auto",boxSizing:"border-box"}}>
+      {title && <p style={{fontWeight:800,fontSize:17,margin:"0 0 14px"}}>{title}</p>}
+      {children}
+    </div>
+  </div>;
+};
+const Toast = ({ message, tone="info", onDone }) => {
+  useEffect(() => { if(!message) return; const t=setTimeout(()=>onDone?.(),3000); return ()=>clearTimeout(t); }, [message,onDone]);
+  if (!message) return null;
+  const c = { info:T.ink, success:T.green, error:T.red }[tone] || T.ink;
+  return <div className="fade" style={{position:"absolute",left:14,right:14,bottom:92,background:c,
+    color:"#fff",borderRadius:14,padding:"12px 16px",fontSize:13.5,fontWeight:600,zIndex:500,
+    boxShadow:"0 8px 30px rgba(0,0,0,.28)"}}>{message}</div>;
+};
+const Stepper = ({ value, onChange, min=1, max=50 }) => (
+  <div style={{display:"flex",alignItems:"center",gap:14}}>
+    <button onClick={()=>onChange(Math.max(min,value-1))} style={{width:32,height:32,borderRadius:"50%",
+      background:T.soft,border:`1px solid ${T.border}`,cursor:"pointer",fontSize:18}}>−</button>
+    <span style={{fontWeight:700,fontSize:16,minWidth:20,textAlign:"center"}}>{value}</span>
+    <button onClick={()=>onChange(Math.min(max,value+1))} style={{width:32,height:32,borderRadius:"50%",
+      background:T.accent,border:"none",color:"#fff",cursor:"pointer",fontSize:18}}>+</button>
+  </div>
+);
+const Stars = ({ rating, size=12 }) => (
+  <span style={{color:T.yellow,fontSize:size}}>
+    {"★".repeat(Math.floor(rating))}{"☆".repeat(5-Math.floor(rating))}
+    <span style={{color:T.muted,fontSize:size-1,marginLeft:4}}>{Number(rating).toFixed(1)}</span>
+  </span>
+);
+const Tabs = ({ tabs, active, onChange }) => (
+  <div style={{display:"flex",background:T.card,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+    {tabs.map(t => (
+      <button key={t.id} onClick={()=>onChange(t.id)} style={{flex:1,padding:"12px 4px",border:"none",
+        background:"none",cursor:"pointer",fontWeight:active===t.id?700:500,fontSize:12.5,
+        color:active===t.id?T.accent:T.muted,
+        borderBottom:active===t.id?`2px solid ${T.accent}`:"2px solid transparent"}}>{t.label}</button>
+    ))}
+  </div>
+);
+const Toggle = ({ checked, onChange, label }) => (
+  <button onClick={()=>onChange(!checked)} role="switch" aria-checked={checked} aria-label={label}
+    style={{width:46,height:26,borderRadius:20,border:"none",cursor:"pointer",flexShrink:0,
+      background:checked?T.green:"#D1D5DB",position:"relative",transition:"background .2s"}}>
+    <span style={{position:"absolute",top:3,left:checked?23:3,width:20,height:20,borderRadius:"50%",
+      background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
+  </button>
+);
+
+/* ═════════════════ AUTENTICAÇÃO + ONBOARDING LGPD ═════════════════ */
+const ROLE_OPTIONS = [
+  { key:"RESIDENT", icon:"🏠", label:"Morador", sub:"Acesso ao app condominial", color:T.accent },
+  { key:"MANAGER", icon:"🏢", label:"Síndico ou gestor", sub:"Painel gerencial no desktop", color:T.green },
+  { key:"MERCHANT", icon:"🏪", label:"Anunciante", sub:"Gestão da loja e pedidos", color:T.orange },
+  { key:"PLATFORM_ADMIN", icon:"⚙️", label:"Administrador LIFE", sub:"Visão global da plataforma", color:T.pink },
+];
+
+function AuthScreen() {
+  const { login, setConsent, notify } = useLife();
+  const [step, setStep] = useState("role");
+  const [role, setRole] = useState(null);
+  const [form, setForm] = useState({ fullName:"", email:"", password:"", cpf:"", birthDate:"", cep:"" });
+  const [errors, setErrors] = useState({});
+  const [local, setLocal] = useState({ MARKETPLACE:true, SOCIAL:true, PROFILING:false, MARKETING:false });
+  const [accepted, setAccepted] = useState(false);
+
+  const enter = useAction(async () => {
+    Object.entries(local).forEach(([k,v]) => setConsent(k,v));
+    login(role);
+    notify(`Bem-vindo ao LIFE, ${role==="RESIDENT"?"Lucas":"modo demonstração"}`, "success");
+  });
+
+  const validate = () => {
+    const e = {};
+    if (!form.fullName.trim() || form.fullName.trim().split(/\s+/).length < 2) e.fullName = "Informe nome e sobrenome";
+    if (!isValidEmail(form.email)) e.email = "E-mail inválido";
+    if (form.password.length < 8) e.password = "Mínimo de 8 caracteres";
+    if (!isValidCPF(form.cpf)) e.cpf = "CPF inválido — o dígito verificador não confere";
+    if (!form.birthDate) e.birthDate = "Informe a data de nascimento";
+    else {
+      const age = (Date.now() - new Date(form.birthDate)) / (365.25*864e5);
+      if (age < 18) e.birthDate = "Cadastro restrito a maiores de 18 anos (art. 14 da LGPD)";
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const shell = (children) => (
+    <div style={{width:"100%",height:"100%",background:T.darkGrad,overflowY:"auto",
+      padding:"32px 20px",boxSizing:"border-box"}}>
+      <div style={{textAlign:"center",marginBottom:22}}>
+        <div style={{fontSize:46,marginBottom:6}}>💎</div>
+        <p style={{fontWeight:900,fontSize:38,color:"#fff",margin:"0 0 4px",letterSpacing:-2}}>LIFE</p>
+        <p style={{color:"rgba(255,255,255,.6)",fontSize:13,margin:0}}>Super App Condominial</p>
+      </div>
+      {children}
+    </div>
+  );
+
+  const darkInput = { background:"rgba(255,255,255,.08)", border:"1px solid rgba(255,255,255,.15)", color:"#fff" };
+
+  if (step === "role") return shell(
+    <React.Fragment>
+      <p style={{color:"rgba(255,255,255,.8)",fontWeight:700,fontSize:14,marginBottom:12}}>Selecione seu perfil</p>
+      {ROLE_OPTIONS.map(o => (
+        <button key={o.key} onClick={()=>{setRole(o.key);setStep("login");}} style={{width:"100%",
+          background:"rgba(255,255,255,.08)",border:`1.5px solid ${o.color}44`,borderRadius:16,
+          padding:"13px 16px",cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",
+          gap:14,color:"#fff",textAlign:"left"}}>
+          <div style={{width:42,height:42,borderRadius:12,background:o.color+"33",display:"flex",
+            alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>{o.icon}</div>
+          <div style={{flex:1}}>
+            <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{o.label}</p>
+            <p style={{fontSize:11,opacity:.65,margin:0}}>{o.sub}</p>
+          </div>
+          <span style={{opacity:.5,fontSize:18}}>›</span>
+        </button>
+      ))}
+      <p style={{color:"rgba(255,255,255,.35)",fontSize:11,textAlign:"center",marginTop:16,lineHeight:1.6}}>
+        {LEGAL.controller.legalName} — CNPJ {LEGAL.controller.cnpj}
+      </p>
+    </React.Fragment>
+  );
+
+  if (step === "login") return shell(
+    <React.Fragment>
+      <button onClick={()=>setStep("role")} style={{background:"none",border:"none",
+        color:"rgba(255,255,255,.7)",fontSize:14,cursor:"pointer",marginBottom:14,padding:0}}>‹ Voltar</button>
+      <p style={{color:"rgba(255,255,255,.8)",fontWeight:700,fontSize:14,marginBottom:14}}>
+        Entrar como {ROLE_OPTIONS.find(o=>o.key===role)?.label}
+      </p>
+      <Input placeholder="E-mail" defaultValue={DEMO_USERS[role]?.email} style={{...darkInput,marginBottom:10}}/>
+      <Input placeholder="Senha" type="password" defaultValue="demo12345" style={{...darkInput,marginBottom:14}}/>
+      <Button variant="primary" loading={enter.loading} onClick={enter.execute}>Entrar</Button>
+      <Button variant="ghost" style={{color:"rgba(255,255,255,.8)",borderColor:"rgba(255,255,255,.2)"}}
+        onClick={()=>setStep("signup")}>Criar conta</Button>
+      <div style={{display:"flex",gap:10,marginTop:14}}>
+        {["G","f","M","🍎"].map(ic => (
+          <button key={ic} onClick={enter.execute} style={{flex:1,padding:11,
+            background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,
+            color:"rgba(255,255,255,.8)",fontSize:14,cursor:"pointer",fontWeight:700}}>{ic}</button>
+        ))}
+      </div>
+      <p style={{color:"rgba(255,255,255,.3)",fontSize:11,textAlign:"center",marginTop:16}}>
+        Demonstração — qualquer credencial entra
+      </p>
+    </React.Fragment>
+  );
+
+  if (step === "signup") return shell(
+    <React.Fragment>
+      <button onClick={()=>setStep("login")} style={{background:"none",border:"none",
+        color:"rgba(255,255,255,.7)",fontSize:14,cursor:"pointer",marginBottom:14,padding:0}}>‹ Voltar</button>
+      <div style={{background:T.card,borderRadius:18,padding:16}}>
+        <Field label="Nome completo" error={errors.fullName}>
+          <Input value={form.fullName} error={errors.fullName}
+            onChange={e=>setForm({...form,fullName:e.target.value})} placeholder="Maria Silva Santos"/>
+        </Field>
+        <Field label="E-mail" error={errors.email}>
+          <Input type="email" value={form.email} error={errors.email}
+            onChange={e=>setForm({...form,email:e.target.value})} placeholder="maria@email.com"/>
+        </Field>
+        <Field label="Senha" error={errors.password}>
+          <Input type="password" value={form.password} error={errors.password}
+            onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 8 caracteres"/>
+        </Field>
+        <Field label="CPF" error={errors.cpf}>
+          <Input inputMode="numeric" value={maskCPF(form.cpf)} error={errors.cpf}
+            onChange={e=>setForm({...form,cpf:e.target.value})} placeholder="000.000.000-00"/>
+        </Field>
+        <Field label="Data de nascimento" error={errors.birthDate}>
+          <Input type="date" value={form.birthDate} error={errors.birthDate}
+            onChange={e=>setForm({...form,birthDate:e.target.value})}/>
+        </Field>
+        {role === "RESIDENT" && (
+          <Field label="CEP do condomínio">
+            <Input inputMode="numeric" value={maskCEP(form.cep)}
+              onChange={e=>setForm({...form,cep:e.target.value})} placeholder="00000-000"/>
+          </Field>
+        )}
+        <Button variant="primary" style={{marginBottom:0}}
+          onClick={()=>{ if(validate()) setStep("consent"); }}>Continuar</Button>
+      </div>
+      <p style={{color:"rgba(255,255,255,.4)",fontSize:11,textAlign:"center",marginTop:14}}>
+        O CPF é validado por dígito verificador antes de prosseguir.
+      </p>
+    </React.Fragment>
+  );
+
+  const required = CONSENT_PURPOSES.filter(p => p.required);
+  const optional = CONSENT_PURPOSES.filter(p => !p.required);
+
+  return shell(
+    <div style={{background:T.card,borderRadius:18,padding:18}}>
+      <p style={{fontWeight:800,fontSize:17,margin:"0 0 6px"}}>Suas escolhas de privacidade</p>
+      <p style={{fontSize:12.5,color:T.muted,margin:"0 0 16px",lineHeight:1.55}}>
+        Cada finalidade tem base legal própria. As opcionais podem ser ativadas ou revogadas quando
+        você quiser, sem perder acesso ao app.
+      </p>
+      <p style={{fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",
+        letterSpacing:1,margin:"0 0 8px"}}>Necessárias para o serviço</p>
+      {required.map(p => (
+        <div key={p.id} style={{background:T.bg,borderRadius:12,padding:12,marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
+            <p style={{fontWeight:700,fontSize:13,margin:"0 0 3px"}}>{p.label}</p>
+            <span style={{fontSize:11,color:T.muted,fontWeight:700,flexShrink:0}}>Obrigatório</span>
+          </div>
+          <p style={{fontSize:11,color:T.accent,margin:"0 0 4px",fontWeight:600}}>{p.legalRef}</p>
+          <p style={{fontSize:12,color:T.muted,margin:0,lineHeight:1.5}}>{p.description}</p>
+        </div>
+      ))}
+      <p style={{fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",
+        letterSpacing:1,margin:"16px 0 8px"}}>Opcionais — você decide</p>
+      {optional.map(p => (
+        <div key={p.id} style={{background:T.bg,borderRadius:12,padding:12,marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1}}>
+              <p style={{fontWeight:700,fontSize:13,margin:"0 0 3px"}}>{p.label}</p>
+              <p style={{fontSize:11,color:T.accent,margin:"0 0 4px",fontWeight:600}}>{p.legalRef}</p>
+              <p style={{fontSize:12,color:T.muted,margin:0,lineHeight:1.5}}>{p.description}</p>
+            </div>
+            <Toggle checked={!!local[p.id]} label={p.label}
+              onChange={v=>setLocal(c=>({...c,[p.id]:v}))}/>
+          </div>
+        </div>
+      ))}
+      <Divider/>
+      <label style={{display:"flex",gap:12,alignItems:"flex-start",cursor:"pointer",margin:"12px 0"}}>
+        <input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}
+          style={{width:20,height:20,marginTop:2,flexShrink:0}}/>
+        <span style={{fontSize:12.5,lineHeight:1.55}}>
+          Li e aceito os <strong>Termos de Uso</strong> e a <strong>Política de Privacidade</strong> (versão {LEGAL.policyVersion}).
+        </span>
+      </label>
+      <LegalNote icon="🛡️">
+        Encarregado de dados: {LEGAL.dpo.name} — {LEGAL.dpo.email}. Você pode exportar ou excluir
+        seus dados a qualquer momento pelo Portal do Titular.
+      </LegalNote>
+      <Button variant="primary" disabled={!accepted} loading={enter.loading} onClick={enter.execute}>
+        Criar minha conta
+      </Button>
+    </div>
+  );
+}
+
+/* ═════════════════ HOME ═════════════════ */
+function HomeScreen({ navigate }) {
+  const { user, role, walletCts } = useLife();
+  const merit = MERIT[user?.meritTier || "BRONZE"];
+  const isResident = role === "RESIDENT";
+
+  return (
+    <Scroll>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+        <div>
+          <p style={{fontSize:12,color:T.muted,margin:0}}>Olá 👋</p>
+          <p style={{fontSize:22,fontWeight:900,color:T.ink,margin:"2px 0 0",letterSpacing:-.5}}>
+            {user?.fullName?.split(" ")[0]}
+          </p>
+          <p style={{fontSize:11,color:T.muted,margin:"2px 0 0"}}>{user?.unit} · {user?.condominiumName}</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:18}}>{merit.icon}</div>
+            <p style={{fontSize:9,fontWeight:700,color:merit.color,margin:0}}>{merit.label}</p>
+          </div>
+          <Avatar name={user?.fullName} size={46}/>
+        </div>
+      </div>
+
+      {isResident && (
+        <React.Fragment>
+          <div onClick={()=>navigate("wallet")} style={{background:T.walletGrad,borderRadius:20,
+            padding:"20px 22px",color:"#fff",marginBottom:14,cursor:"pointer",
+            boxShadow:"0 8px 28px rgba(124,92,252,.3)"}}>
+            <p style={{fontSize:11,opacity:.8,margin:"0 0 2px",letterSpacing:.5}}>LIFEWALLET · CASHBACK</p>
+            <p style={{fontSize:32,fontWeight:900,margin:"0 0 10px",letterSpacing:-1}}>{fmtBRL(walletCts)}</p>
+            <p style={{fontSize:11,opacity:.75,margin:0}}>Crédito para usar no app · não sacável</p>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <button onClick={()=>navigate("marketplace")} style={{border:"none",cursor:"pointer",
+              borderRadius:18,padding:"20px 14px",background:T.mktGrad,color:"#fff",textAlign:"center",
+              boxShadow:"0 6px 22px rgba(255,107,53,.35)"}}>
+              <div style={{fontSize:30,marginBottom:6}}>🛍️</div>
+              <p style={{fontWeight:800,fontSize:14,margin:"0 0 2px"}}>Marketplace</p>
+              <p style={{fontSize:10,opacity:.85,margin:0}}>Interno e Express</p>
+            </button>
+            <button onClick={()=>navigate("services")} style={{border:"none",cursor:"pointer",
+              borderRadius:18,padding:"20px 14px",background:T.facGrad,color:"#fff",textAlign:"center",
+              boxShadow:"0 6px 22px rgba(124,92,252,.35)"}}>
+              <div style={{fontSize:30,marginBottom:6}}>🔧</div>
+              <p style={{fontWeight:800,fontSize:13,margin:"0 0 2px"}}>Facilidades</p>
+              <p style={{fontSize:10,opacity:.85,margin:0}}>Serviços e manutenção</p>
+            </button>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:12}}>
+            {[["📬","Correio","parcels"],["🔄","Trocas","swap"],["🎉","Eventos","events"],["💬","Social","social"]].map(([i,l,to])=>(
+              <button key={to} onClick={()=>navigate(to)} style={{background:T.card,border:"none",
+                borderRadius:14,padding:"12px 4px",cursor:"pointer",textAlign:"center",
+                boxShadow:"0 2px 8px rgba(0,0,0,.05)"}}>
+                <div style={{fontSize:21}}>{i}</div>
+                <p style={{fontSize:10,fontWeight:600,color:T.muted,margin:"4px 0 0"}}>{l}</p>
+              </button>
+            ))}
+          </div>
+
+          <Heading>Condomínio</Heading>
+          <Card>
+            <div style={{display:"flex",gap:8}}>
+              {[["📄","Boletos","invoices"],["📢","Avisos","notices"],["⚠️","Ocorrências","incidents"],["📅","Reservas","bookings"]].map(([i,l,to])=>(
+                <button key={to} onClick={()=>navigate(to)} style={{flex:1,background:T.bg,border:"none",
+                  borderRadius:12,padding:"12px 4px",cursor:"pointer",textAlign:"center"}}>
+                  <div style={{fontSize:20}}>{i}</div>
+                  <p style={{fontSize:9.5,fontWeight:600,color:T.muted,margin:"4px 0 0"}}>{l}</p>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <Card style={{background:"#FFFBEA",border:`1px solid ${T.yellow}44`}}>
+            <div style={{display:"flex",gap:12,alignItems:"center"}}>
+              <div style={{fontSize:26}}>💡</div>
+              <div>
+                <p style={{fontWeight:700,fontSize:13,margin:"0 0 3px"}}>Use seu cashback</p>
+                <p style={{fontSize:12,color:T.muted,margin:0}}>
+                  Você tem {fmtBRL(walletCts)} disponíveis. Vale 10% extra na Pizzaria do Zé hoje 🍕
+                </p>
+              </div>
+            </div>
+          </Card>
+        </React.Fragment>
+      )}
+
+      {role === "MANAGER" && (
+        <React.Fragment>
+          <Card style={{background:`linear-gradient(135deg,${T.green},#059669)`,color:"#fff"}}>
+            <p style={{fontSize:11,opacity:.8,margin:"0 0 2px"}}>RECEITA DO APP · OUTUBRO</p>
+            <p style={{fontSize:28,fontWeight:900,margin:"0 0 4px"}}>{fmtBRL(482000)}</p>
+            <p style={{fontSize:12,opacity:.8,margin:0}}>Repasse ao condomínio: {fmtBRL(48200)}</p>
+          </Card>
+          <LegalNote icon="💻" color={T.accent}>
+            Em tela larga, seu perfil abre o painel gerencial completo com boletos, moderação e conformidade.
+          </LegalNote>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {[["📄","Boletos","invoices"],["💬","Chat geral","social"],["⚖️","Direitos","legal"],["💎","Carteira","wallet"]].map(([i,l,to])=>(
+              <button key={to} onClick={()=>navigate(to)} style={{background:T.card,border:"none",
+                borderRadius:16,padding:"16px 12px",cursor:"pointer",textAlign:"left",
+                boxShadow:"0 2px 8px rgba(0,0,0,.05)",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{fontSize:24}}>{i}</div>
+                <p style={{fontSize:13,fontWeight:700,margin:0}}>{l}</p>
+              </button>
+            ))}
+          </div>
+        </React.Fragment>
+      )}
+
+      {(role === "MERCHANT" || role === "PLATFORM_ADMIN") && (
+        <React.Fragment>
+          <Card style={{background:role==="MERCHANT"?T.mktGrad:`linear-gradient(135deg,${T.pink},${T.accent})`,color:"#fff"}}>
+            <p style={{fontSize:11,opacity:.8,margin:"0 0 2px"}}>
+              {role==="MERCHANT" ? "FATURAMENTO · OUTUBRO" : "PLATAFORMA · VISÃO GLOBAL"}
+            </p>
+            <p style={{fontSize:26,fontWeight:900,margin:"0 0 4px"}}>
+              {role==="MERCHANT" ? fmtBRL(1842000) : "4 condomínios"}
+            </p>
+            <p style={{fontSize:12,opacity:.8,margin:0}}>
+              {role==="MERCHANT" ? "342 pedidos · ⭐ 4.8" : "312 usuários · GMV de R$ 80 mil/mês"}
+            </p>
+          </Card>
+          <LegalNote icon="💻" color={T.accent}>
+            Abra em uma janela larga para ver o painel gerencial deste perfil.
+          </LegalNote>
+        </React.Fragment>
+      )}
+
+      <Card onClick={()=>navigate("legal")} style={{marginTop:12,background:T.bg}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontSize:22}}>⚖️</span>
+          <div style={{flex:1}}>
+            <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 2px"}}>Central Jurídica</p>
+            <p style={{fontSize:11.5,color:T.muted,margin:0}}>Seus dados, direitos e canais de atendimento</p>
+          </div>
+          <span style={{color:T.muted,fontSize:18}}>›</span>
+        </div>
+      </Card>
+    </Scroll>
+  );
+}
+
+/* ═════════════════ MARKETPLACE ═════════════════ */
+function MarketplaceScreen({ navigate, onHome }) {
+  const { addToCart, cartTotals, notify } = useLife();
+  const [channel, setChannel] = useState("INTERNAL");
+  const [merchant, setMerchant] = useState(null);
+  const [product, setProduct] = useState(null);
+  const [addonIds, setAddonIds] = useState([]);
+  const [quantity, setQuantity] = useState(1);
+
+  const list = MERCHANTS.filter(m => m.channel === channel);
+
+  if (product) {
+    const unitCts = Math.round(product.priceCts * (1 - (product.discountPct||0)/100));
+    const addonsCts = (product.addons||[]).filter(a=>addonIds.includes(a.id)).reduce((s,a)=>s+a.priceCts,0);
+    const totalCts = (unitCts + addonsCts) * quantity;
+    return (
+      <Scroll padded={false}>
+        <TopBar title={product.name} onHome={onHome}
+          onBack={()=>{setProduct(null);setAddonIds([]);setQuantity(1);}}/>
+        <div style={{padding:14}}>
+          <Card style={{textAlign:"center",padding:26}}>
+            <div style={{fontSize:62,marginBottom:12}}>{product.imageUrl}</div>
+            <p style={{fontWeight:800,fontSize:18,margin:"0 0 4px"}}>{product.name}</p>
+            <p style={{fontSize:13,color:T.muted,margin:"0 0 12px"}}>{product.description}</p>
+            {product.discountPct > 0 && <div><Money cts={product.priceCts} strike size={14}/></div>}
+            <div><Money cts={unitCts} size={26} color={T.accent}/></div>
+            <div style={{marginTop:8}}><Badge color={T.green}>{product.cashbackPct}% de cashback</Badge></div>
+          </Card>
+          {!product.withdrawalEligible && (
+            <LegalNote icon="↩️" color={T.orange}>
+              Este item não admite direito de arrependimento por ser perecível ou preparado sob encomenda (CDC art. 49).
+            </LegalNote>
+          )}
+          {product.requiresPrescription && (
+            <LegalNote icon="💊" color={T.red}>
+              Venda sob prescrição. A retenção da receita é feita na entrega, conforme a RDC 20/2011 da Anvisa.
+            </LegalNote>
+          )}
+          {product.addons?.length > 0 && (
+            <Card>
+              <p style={{fontWeight:700,margin:"0 0 12px"}}>Adicionais</p>
+              {product.addons.map(a => (
+                <label key={a.id} style={{display:"flex",justifyContent:"space-between",
+                  alignItems:"center",marginBottom:10,cursor:"pointer"}}>
+                  <span style={{display:"flex",alignItems:"center",gap:10,fontSize:14}}>
+                    <input type="checkbox" checked={addonIds.includes(a.id)} style={{width:18,height:18}}
+                      onChange={e=>setAddonIds(p => e.target.checked ? [...p,a.id] : p.filter(x=>x!==a.id))}/>
+                    {a.name}
+                  </span>
+                  <span style={{fontSize:13,color:T.muted}}>+{fmtBRL(a.priceCts)}</span>
+                </label>
+              ))}
+            </Card>
+          )}
+          <Card>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontWeight:700}}>Quantidade</span>
+              <Stepper value={quantity} onChange={setQuantity}/>
+            </div>
+          </Card>
+          <Button variant="primary" onClick={()=>{
+            addToCart(product, { quantity, addonIds, merchant });
+            notify("Adicionado ao carrinho","success");
+            setProduct(null); setAddonIds([]); setQuantity(1);
+          }}>Adicionar · {fmtBRL(totalCts)}</Button>
+        </div>
+      </Scroll>
+    );
+  }
+
+  if (merchant) return (
+    <Scroll padded={false}>
+      <div style={{background:merchant.bannerColor,paddingBottom:18}}>
+        <TopBar title="" onBack={()=>setMerchant(null)} onHome={onHome}/>
+        <div style={{textAlign:"center",padding:"0 16px"}}>
+          <div style={{fontSize:46}}>{merchant.logoUrl}</div>
+          <p style={{fontWeight:800,fontSize:18,color:"#fff",margin:"6px 0"}}>{merchant.tradeName}</p>
+          <div style={{display:"flex",justifyContent:"center",gap:8,flexWrap:"wrap"}}>
+            <Badge color="#fff">⭐ {merchant.rating}</Badge>
+            <Badge color="#fff">{merchant.etaMinutes} min</Badge>
+            <Badge color="#fff">{merchant.cashbackPct}% cashback</Badge>
+          </div>
+        </div>
+      </div>
+      <div style={{padding:14}}>
+        <Card style={{background:T.bg}}>
+          <p style={{fontSize:10.5,fontWeight:700,color:T.muted,textTransform:"uppercase",
+            letterSpacing:1,margin:"0 0 6px"}}>Dados do fornecedor · CDC art. 31</p>
+          <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 2px"}}>{merchant.legalName}</p>
+          <p style={{fontSize:11.5,color:T.muted,margin:"0 0 2px"}}>CNPJ {merchant.cnpj}</p>
+          <p style={{fontSize:11.5,color:T.muted,margin:"0 0 2px"}}>{merchant.addressFull}</p>
+          <p style={{fontSize:11.5,color:T.muted,margin:0}}>SAC {merchant.sacPhone} · {merchant.sacEmail}</p>
+          {merchant.technicalResp && (
+            <p style={{fontSize:11.5,color:T.muted,margin:"2px 0 0"}}>Responsável técnico: {merchant.technicalResp}</p>
+          )}
+        </Card>
+        <Heading>Cardápio</Heading>
+        {merchant.products.map(p => {
+          const unitCts = Math.round(p.priceCts * (1 - (p.discountPct||0)/100));
+          return (
+            <Card key={p.id} onClick={()=>setProduct(p)}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <div style={{fontSize:36,flexShrink:0}}>{p.imageUrl}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{p.name}</p>
+                  <p style={{fontSize:12,color:T.muted,margin:"0 0 6px"}}>{p.description}</p>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    {p.discountPct > 0 && <Money cts={p.priceCts} strike size={12}/>}
+                    <Money cts={unitCts} color={T.accent}/>
+                  </div>
+                </div>
+                <div style={{width:28,height:28,borderRadius:"50%",background:T.accent,color:"#fff",
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>+</div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </Scroll>
+  );
+
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Marketplace" onHome={onHome}
+        right={<button onClick={()=>navigate("cart")} style={{background:T.accent,border:"none",
+          borderRadius:20,color:"#fff",padding:"7px 13px",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+          🛒 {cartTotals.count || ""}</button>}/>
+      <Tabs active={channel} onChange={setChannel}
+        tabs={[{id:"INTERNAL",label:"🏠 Interno"},{id:"EXPRESS",label:"⚡ Express"}]}/>
+      <div style={{padding:14}}>
+        <div style={{background:channel==="INTERNAL"?T.mktGrad:"linear-gradient(135deg,#FF6B35,#D97706)",
+          borderRadius:18,padding:"16px 18px",color:"#fff",marginBottom:14}}>
+          <p style={{fontSize:11,opacity:.85,margin:"0 0 4px"}}>
+            {channel==="INTERNAL" ? "OFERTA DO DIA" : "ENTREGA RÁPIDA"}
+          </p>
+          <p style={{fontWeight:800,fontSize:15,margin:0}}>
+            {channel==="INTERNAL" ? "Cashback duplo na Pizzaria hoje 🍕" : "Farmácia em 20 min, 4% de cashback 💊"}
+          </p>
+        </div>
+        <LegalNote icon="⚖️" color={T.orange}>{LEGAL.disclaimers.marketplaceLiability}</LegalNote>
+        {list.map(m => (
+          <Card key={m.id} onClick={()=>setMerchant(m)}>
+            <div style={{display:"flex",gap:14,alignItems:"center"}}>
+              <div style={{width:52,height:52,borderRadius:14,flexShrink:0,background:m.bannerColor+"33",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:25}}>{m.logoUrl}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:4}}>
+                  <p style={{fontWeight:700,fontSize:14,margin:0}}>{m.tradeName}</p>
+                  <Badge color={channel==="INTERNAL"?T.green:T.orange}>
+                    {channel==="INTERNAL"?"Interno":"Express"}</Badge>
+                </div>
+                <p style={{fontSize:11.5,color:T.muted,margin:"0 0 5px"}}>CNPJ {m.cnpj}</p>
+                <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                  <Stars rating={m.rating}/>
+                  <span style={{fontSize:11,color:T.muted}}>{m.etaMinutes} min</span>
+                  <span style={{fontSize:11,color:T.green,fontWeight:600}}>{m.cashbackPct}% cashback</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </Scroll>
+  );
+}
+
+/* ═════════════════ CARRINHO E CHECKOUT ═════════════════ */
+function CartScreen({ onBack, onHome, onCheckout }) {
+  const { cart, updateQty, cartTotals, clearCart } = useLife();
+  if (!cart.length) return (
+    <Scroll padded={false}>
+      <TopBar title="Carrinho" onBack={onBack} onHome={onHome}/>
+      <Empty icon="🛒" title="Carrinho vazio" sub="Adicione itens do marketplace para continuar."
+        action={<Button variant="primary" onClick={onBack}>Ver lojas</Button>}/>
+    </Scroll>
+  );
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Carrinho" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        {cartTotals.mixed && (
+          <LegalNote icon="⚠️" color={T.orange}>
+            Há itens de lojas diferentes. Cada loja gera um pedido separado, com nota fiscal própria.
+          </LegalNote>
+        )}
+        {cart.map(item => (
+          <Card key={item.key}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{fontSize:30}}>{item.imageUrl}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{item.name}</p>
+                <p style={{fontSize:11.5,color:T.muted,margin:"0 0 4px"}}>{item.merchant.tradeName}</p>
+                {item.addons.length > 0 && (
+                  <p style={{fontSize:11.5,color:T.muted,margin:"0 0 4px"}}>
+                    + {item.addons.map(a=>a.name).join(", ")}</p>
+                )}
+                <Money cts={item.unitCts+item.addonsCts} color={T.accent}/>
+              </div>
+              <Stepper value={item.quantity} onChange={q=>updateQty(item.key,q)}/>
+            </div>
+          </Card>
+        ))}
+        <Card style={{background:`${T.accent}08`}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:13,color:T.muted}}>Subtotal</span><Money cts={cartTotals.subtotalCts}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between"}}>
+            <span style={{fontSize:13,color:T.green}}>Cashback previsto</span>
+            <span style={{fontSize:14,fontWeight:800,color:T.green}}>+{fmtBRL(cartTotals.cashbackCts)}</span>
+          </div>
+        </Card>
+        <Button variant="primary" onClick={onCheckout}>
+          Ir para pagamento · {fmtBRL(cartTotals.subtotalCts)}</Button>
+        <Button variant="ghost" onClick={clearCart}>Esvaziar carrinho</Button>
+      </div>
+    </Scroll>
+  );
+}
+
+const METHODS = [
+  { id:"PIX", icon:"⚡", label:"Pix", hint:"Aprovação imediata" },
+  { id:"CREDIT_CARD", icon:"💳", label:"Cartão de crédito", hint:"Visa, Mastercard, Elo, Hipercard, Amex" },
+  { id:"DEBIT_CARD", icon:"🏧", label:"Cartão de débito", hint:"Débito à vista" },
+  { id:"PAYPAL", icon:"🅿️", label:"PayPal", hint:"Você será redirecionado" },
+  { id:"BOLETO", icon:"📄", label:"Boleto", hint:"Compensa em até 3 dias úteis" },
+];
+
+function CheckoutScreen({ onBack, onHome, onDone }) {
+  const { cartTotals, walletCts, setWalletCts, notify, clearCart, setOrders } = useLife();
+  const [method, setMethod] = useState("PIX");
+  const [installments, setInstallments] = useState(1);
+  const [useWallet, setUseWallet] = useState(false);
+  const [card, setCard] = useState({ number:"", holder:"", expMonth:"", expYear:"", cvv:"", cpf:"" });
+  const [errors, setErrors] = useState({});
+  const [showSplit, setShowSplit] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [pix, setPix] = useState(null);
+
+  const merchant = cartTotals.merchant || MERCHANTS[0];
+  const grossCts = cartTotals.subtotalCts;
+  const walletUsedCts = useWallet ? Math.min(walletCts, grossCts) : 0;
+  const chargeableCts = grossCts - walletUsedCts;
+  const split = useMemo(() => computeSplit({ subtotalCts:grossCts,
+    commissionPct:merchant.commissionPct, condoSharePct:10, walletUsedCts }), [grossCts, merchant, walletUsedCts]);
+  const installmentOptions = useMemo(() => computeInstallments(chargeableCts), [chargeableCts]);
+  const brand = detectCardBrand(card.number);
+  const needsCard = method === "CREDIT_CARD" || method === "DEBIT_CARD";
+
+  const pay = useAction(async () => {
+    if (needsCard) {
+      const v = validateCard(card);
+      const e = { ...v.errors };
+      if (!isValidCPF(card.cpf)) e.cpf = "CPF do titular inválido";
+      setErrors(e);
+      if (Object.keys(e).length) { notify("Verifique os dados do cartão","error"); return; }
+    }
+    if (method === "PIX") {
+      setPix({ amountCts: chargeableCts, code: "00020126580014BR.GOV.BCB.PIX0136" + protocolOf("LIFE").toLowerCase() });
+      return;
+    }
+    if (walletUsedCts > 0) setWalletCts(w => w - walletUsedCts);
+    setWalletCts(w => w + cartTotals.cashbackCts);
+    setOrders(o => [{ id:protocolOf("o"), reference:protocolOf("PED"), status:"CONFIRMED",
+      grossCts, commissionCts:split.commissionCts, merchantNetCts:split.merchantNetCts,
+      condoShareCts:split.condoShareCts, cashbackCts:cartTotals.cashbackCts,
+      deliveredAt:new Date().toISOString().slice(0,10), merchant:{tradeName:merchant.tradeName},
+      user:{fullName:"Lucas Ferreira"}, withdrawalEligible:cartTotals.allWithdrawable }, ...o]);
+    clearCart();
+    notify(`Pagamento aprovado · +${fmtBRL(cartTotals.cashbackCts)} de cashback`, "success");
+    onDone();
+  });
+
+  if (pix) return (
+    <Scroll padded={false}>
+      <TopBar title="Pague com Pix" onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{textAlign:"center",padding:24}}>
+          <div style={{width:170,height:170,margin:"0 auto 14px",background:"#fff",
+            border:`2px solid ${T.border}`,borderRadius:14,display:"grid",
+            gridTemplateColumns:"repeat(9,1fr)",gap:2,padding:12}}>
+            {Array.from({length:81}).map((_,i)=>(
+              <div key={i} style={{background:(i*7+i%5)%3?T.ink:"#fff",borderRadius:1}}/>
+            ))}
+          </div>
+          <Money cts={pix.amountCts} size={26} color={T.accent}/>
+          <p style={{fontSize:12.5,color:T.muted,margin:"8px 0 0"}}>Escaneie no app do seu banco</p>
+        </Card>
+        <Card>
+          <p style={{fontWeight:700,fontSize:13,margin:"0 0 8px"}}>Pix copia e cola</p>
+          <div style={{background:T.bg,borderRadius:10,padding:12,marginBottom:10}}>
+            <p style={{fontSize:10.5,fontFamily:"monospace",wordBreak:"break-all",margin:0,color:T.muted}}>{pix.code}</p>
+          </div>
+          <Button variant="soft" style={{marginBottom:0}}
+            onClick={()=>{navigator.clipboard?.writeText(pix.code);notify("Código copiado","success");}}>
+            Copiar código</Button>
+        </Card>
+        <LegalNote icon="🏦">{LEGAL.disclaimers.notAFinancialInstitution}</LegalNote>
+        <Button variant="primary" onClick={()=>{
+          setWalletCts(w => w - walletUsedCts + cartTotals.cashbackCts);
+          clearCart(); notify("Pagamento confirmado","success"); onDone();
+        }}>Já paguei</Button>
+      </div>
+    </Scroll>
+  );
+
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Pagamento" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card>
+          <p style={{fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",
+            letterSpacing:1,margin:"0 0 8px"}}>Fornecedor</p>
+          <p style={{fontWeight:700,fontSize:14,margin:"0 0 3px"}}>{merchant.legalName}</p>
+          <p style={{fontSize:12,color:T.muted,margin:"0 0 2px"}}>CNPJ {merchant.cnpj}</p>
+          <p style={{fontSize:12,color:T.muted,margin:"0 0 2px"}}>{merchant.addressFull}</p>
+          <p style={{fontSize:12,color:T.muted,margin:0}}>SAC {merchant.sacPhone}</p>
+        </Card>
+
+        <Card>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:13,color:T.muted}}>Total do pedido</span><Money cts={grossCts}/>
+          </div>
+          {walletUsedCts > 0 && (
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <span style={{fontSize:13,color:T.accent}}>LifeWallet</span>
+              <span style={{fontSize:14,fontWeight:700,color:T.accent}}>−{fmtBRL(walletUsedCts)}</span>
+            </div>
+          )}
+          <Divider/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontWeight:800,fontSize:15}}>A pagar</span>
+            <Money cts={chargeableCts} size={20} color={T.accent}/>
+          </div>
+          <button onClick={()=>setShowSplit(true)} style={{background:"none",border:"none",
+            color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",padding:"8px 0 0"}}>
+            Ver como o valor é dividido</button>
+        </Card>
+
+        {walletCts > 0 && (
+          <Card>
+            <label style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+              <input type="checkbox" checked={useWallet} onChange={e=>setUseWallet(e.target.checked)}
+                style={{width:20,height:20}}/>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 2px"}}>Usar LifeWallet</p>
+                <p style={{fontSize:12,color:T.muted,margin:0}}>Saldo: {fmtBRL(walletCts)}</p>
+              </div>
+            </label>
+          </Card>
+        )}
+
+        <Heading>Forma de pagamento</Heading>
+        {METHODS.map(m => (
+          <Card key={m.id} onClick={()=>setMethod(m.id)} highlight={method===m.id}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:24}}>{m.icon}</span>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{m.label}</p>
+                <p style={{fontSize:11.5,color:T.muted,margin:0}}>{m.hint}</p>
+              </div>
+              <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
+                border:`2px solid ${method===m.id?T.accent:T.border}`,
+                background:method===m.id?T.accent:"transparent"}}/>
+            </div>
+          </Card>
+        ))}
+
+        {needsCard && (
+          <Card>
+            <Field label="Número do cartão" error={errors.number}>
+              <div style={{position:"relative"}}>
+                <Input inputMode="numeric" value={maskCard(card.number)} error={errors.number}
+                  onChange={e=>setCard({...card,number:e.target.value})} placeholder="0000 0000 0000 0000"/>
+                {brand.brand !== "UNKNOWN" && (
+                  <span style={{position:"absolute",right:12,top:14,fontSize:11,fontWeight:700,color:T.accent}}>
+                    {brand.label}</span>
+                )}
+              </div>
+            </Field>
+            <Field label="Nome como está no cartão" error={errors.holder}>
+              <Input value={card.holder} error={errors.holder}
+                onChange={e=>setCard({...card,holder:e.target.value.toUpperCase()})} placeholder="MARIA S SILVA"/>
+            </Field>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+              <Field label="Mês" error={errors.expMonth}>
+                <Input inputMode="numeric" maxLength={2} value={card.expMonth}
+                  onChange={e=>setCard({...card,expMonth:e.target.value})} placeholder="12"/>
+              </Field>
+              <Field label="Ano" error={errors.expiry}>
+                <Input inputMode="numeric" maxLength={4} value={card.expYear}
+                  onChange={e=>setCard({...card,expYear:e.target.value})} placeholder="2030"/>
+              </Field>
+              <Field label="CVV" error={errors.cvv}>
+                <Input inputMode="numeric" maxLength={4} value={card.cvv}
+                  onChange={e=>setCard({...card,cvv:e.target.value})} placeholder="123"/>
+              </Field>
+            </div>
+            <Field label="CPF do titular" error={errors.cpf}>
+              <Input inputMode="numeric" value={maskCPF(card.cpf)} error={errors.cpf}
+                onChange={e=>setCard({...card,cpf:e.target.value})} placeholder="000.000.000-00"/>
+            </Field>
+            {method === "CREDIT_CARD" && (
+              <Field label="Parcelamento">
+                <select value={installments} onChange={e=>setInstallments(Number(e.target.value))}
+                  style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${T.border}`,
+                    fontSize:14,boxSizing:"border-box",background:T.card}}>
+                  {installmentOptions.map(o => <option key={o.n} value={o.n}>{o.label}</option>)}
+                </select>
+              </Field>
+            )}
+            <LegalNote icon="🔐" color={T.green}>
+              Os dados do cartão são criptografados no seu aparelho e enviados direto ao processador
+              autorizado pelo BACEN. O LIFE nunca recebe o número completo nem o CVV.
+            </LegalNote>
+          </Card>
+        )}
+
+        <LegalNote icon="↩️" color={T.pink}>
+          <strong>Direito de arrependimento:</strong> {cartTotals.allWithdrawable
+            ? `você tem ${LEGAL.deadlines.withdrawalDays} dias corridos após a entrega para desistir, sem justificar. Reembolso integral e cashback estornado.`
+            : "este pedido contém itens perecíveis ou preparados sob encomenda, que não admitem arrependimento (CDC art. 49)."}
+        </LegalNote>
+        <LegalNote icon="💎" color={T.accent}>{LEGAL.disclaimers.walletNotCashable}</LegalNote>
+        <LegalNote icon="🏦" color={T.green}>{LEGAL.disclaimers.notAFinancialInstitution}</LegalNote>
+
+        <Card>
+          <label style={{display:"flex",gap:12,cursor:"pointer",alignItems:"flex-start"}}>
+            <input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}
+              style={{width:20,height:20,marginTop:2,flexShrink:0}}/>
+            <span style={{fontSize:12.5,lineHeight:1.55}}>
+              Li e aceito os <strong>Termos de Uso</strong> e a <strong>Política de Privacidade</strong>,
+              e estou ciente das condições de arrependimento e cancelamento.
+            </span>
+          </label>
+        </Card>
+
+        <Button variant="primary" disabled={!accepted} loading={pay.loading} onClick={pay.execute}>
+          Pagar {fmtBRL(chargeableCts)}</Button>
+        <p style={{fontSize:11,color:T.muted,textAlign:"center",margin:"4px 0 0"}}>
+          SAC {LEGAL.sac.phone} · {LEGAL.sac.hours}</p>
+      </div>
+
+      <Sheet open={showSplit} onClose={()=>setShowSplit(false)} title="Como o valor é dividido">
+        {[["Valor pago por você",split.grossCts,T.text],
+          ["Repassado à loja",split.merchantNetCts,T.green],
+          ["Comissão LIFE",split.commissionCts,T.accent],
+          ["Repasse ao condomínio",split.condoShareCts,T.orange]].map(([l,c,col])=>(
+          <div key={l} style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+            <span style={{fontSize:13,color:T.muted}}>{l}</span>
+            <span style={{fontSize:14,fontWeight:700,color:col}}>{fmtBRL(c)}</span>
+          </div>
+        ))}
+        <Divider/>
+        <p style={{fontSize:11.5,color:T.muted,lineHeight:1.6,margin:"6px 0 14px"}}>
+          O repasse ao condomínio corresponde a 10% da comissão do LIFE e entra na prestação de contas
+          mensal do síndico, conforme art. 1.348 do Código Civil.
+        </p>
+        <Button variant="soft" onClick={()=>setShowSplit(false)} style={{marginBottom:0}}>Entendi</Button>
+      </Sheet>
+    </Scroll>
+  );
+}
+
+/* ═════════════════ CARTEIRA, BOLETOS, ARREPENDIMENTO ═════════════════ */
+function WalletScreen({ onBack, onHome }) {
+  const { walletCts } = useLife();
+  const DIR = { CREDIT:["+",T.green], DEBIT:["−",T.text], EXPIRY:["−",T.muted], REVERSAL:["+",T.orange] };
+  return (
+    <Scroll padded={false}>
+      <TopBar title="LifeWallet" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{background:T.walletGrad,color:"#fff",padding:22}}>
+          <p style={{fontSize:11,opacity:.8,margin:"0 0 4px",letterSpacing:.5}}>SALDO DISPONÍVEL</p>
+          <p style={{fontSize:34,fontWeight:900,margin:"0 0 8px",letterSpacing:-1}}>{fmtBRL(walletCts)}</p>
+          <p style={{fontSize:11.5,opacity:.75,margin:0}}>
+            Crédito promocional · validade de {LEGAL.deadlines.walletExpiryMonths} meses</p>
+        </Card>
+        <LegalNote icon="💎">{LEGAL.disclaimers.walletNotCashable}</LegalNote>
+        <Heading>Extrato</Heading>
+        {WALLET_ENTRIES.map(e => {
+          const [sign,color] = DIR[e.direction] || ["",T.text];
+          return (
+            <Card key={e.id} style={{padding:"13px 15px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontSize:13.5,fontWeight:600,margin:"0 0 2px"}}>{e.reason}</p>
+                  <p style={{fontSize:11.5,color:T.muted,margin:0}}>
+                    {new Date(e.createdAt).toLocaleDateString("pt-BR")}
+                    {e.expiresAt && ` · expira em ${new Date(e.expiresAt).toLocaleDateString("pt-BR")}`}
+                  </p>
+                </div>
+                <span style={{fontSize:14,fontWeight:800,color,flexShrink:0}}>{sign}{fmtBRL(e.amountCts)}</span>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </Scroll>
+  );
+}
+
+function InvoicesScreen({ onBack, onHome }) {
+  const { notify } = useLife();
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Boletos" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        {INVOICES.map(inv => (
+          <Card key={inv.id}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:14,margin:"0 0 3px"}}>{inv.description}</p>
+                <p style={{fontSize:12,color:T.muted,margin:0}}>
+                  Vence em {new Date(inv.dueDate).toLocaleDateString("pt-BR")}</p>
+              </div>
+              <Badge status={inv.status}/>
+            </div>
+            <Money cts={inv.amountCts} size={22} color={inv.status==="OVERDUE"?T.red:T.text}/>
+            <p style={{fontSize:11,color:T.muted,margin:"8px 0 0",lineHeight:1.5}}>
+              Base do rateio: {inv.legalBasis}
+              {inv.assemblyRef && ` · aprovada em ${inv.assemblyRef}`}
+            </p>
+            {inv.status !== "PAID" && (
+              <div style={{marginTop:12}}>
+                <Button variant="primary" style={{marginBottom:0}}
+                  onClick={()=>notify("Redirecionando ao processador autorizado…","info")}>Pagar agora</Button>
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+    </Scroll>
+  );
+}
+
+function WithdrawalScreen({ onBack, onHome }) {
+  const { orders, setOrders, walletCts, setWalletCts, notify } = useLife();
+  const [selected, setSelected] = useState(null);
+  const [done, setDone] = useState(null);
+
+  const eligible = orders.filter(o => o.withdrawalEligible && o.deliveredAt &&
+    o.status !== "WITHDRAWN" && withdrawalWindow(o.deliveredAt).eligible);
+
+  const confirm = useAction(async () => {
+    setOrders(os => os.map(o => o.id===selected.id ? {...o, status:"WITHDRAWN"} : o));
+    setWalletCts(w => Math.max(0, w - selected.cashbackCts));
+    setDone(selected);
+    notify("Desistência registrada","success");
+  });
+
+  if (done) return (
+    <Scroll padded={false}>
+      <TopBar title="Desistência" onHome={onHome}/>
+      <Empty icon="✅" title="Desistência registrada"
+        sub={`Reembolso integral de ${fmtBRL(done.grossCts)} em até ${LEGAL.deadlines.refundBusinessDays} dias úteis, na mesma forma de pagamento. O cashback de ${fmtBRL(done.cashbackCts)} foi estornado.`}
+        action={<Button variant="primary" onClick={onHome}>Voltar ao início</Button>}/>
+    </Scroll>
+  );
+
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Direito de Arrependimento" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{background:`linear-gradient(135deg,${T.pink},${T.accent})`,color:"#fff"}}>
+          <p style={{fontSize:11,opacity:.8,margin:"0 0 4px"}}>ART. 49 · CÓDIGO DE DEFESA DO CONSUMIDOR</p>
+          <p style={{fontWeight:800,fontSize:17,margin:"0 0 6px"}}>
+            {LEGAL.deadlines.withdrawalDays} dias para desistir</p>
+          <p style={{fontSize:12.5,opacity:.85,margin:0,lineHeight:1.5}}>
+            Sem justificar. Reembolso integral, incluindo frete.</p>
+        </Card>
+        {eligible.length === 0 ? (
+          <Empty icon="📦" title="Nenhum pedido no prazo"
+            sub="Pedidos elegíveis entregues nos últimos 7 dias aparecem aqui."/>
+        ) : eligible.map(o => {
+          const win = withdrawalWindow(o.deliveredAt);
+          return (
+            <Card key={o.id} highlight={selected?.id===o.id} onClick={()=>setSelected(o)}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{o.merchant.tradeName}</p>
+                  <p style={{fontSize:11.5,color:T.muted,margin:0,fontFamily:"monospace"}}>{o.reference}</p>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <Money cts={o.grossCts}/>
+                  <div style={{marginTop:4}}>
+                    <Badge color={T.green}>{win.remainingDays} dia(s) restantes</Badge>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+        {selected && (
+          <React.Fragment>
+            <LegalNote icon="ℹ️">
+              Ao desistir, {fmtBRL(selected.grossCts)} voltam integralmente em até {LEGAL.deadlines.refundBusinessDays} dias
+              úteis. O cashback de {fmtBRL(selected.cashbackCts)} será estornado do seu LifeWallet.
+            </LegalNote>
+            <Button variant="primary" loading={confirm.loading} onClick={confirm.execute}>
+              Confirmar desistência</Button>
+          </React.Fragment>
+        )}
+        <Card style={{background:T.bg}}>
+          <p style={{fontWeight:700,fontSize:12.5,margin:"0 0 8px"}}>Quando não se aplica</p>
+          {["Produtos personalizados ou sob encomenda","Alimentos perecíveis já entregues",
+            "Serviços integralmente prestados","Compras feitas presencialmente"].map(i=>(
+            <p key={i} style={{fontSize:12,color:T.muted,margin:"0 0 5px"}}>• {i}</p>
+          ))}
+        </Card>
+      </div>
+    </Scroll>
+  );
+}
+
+/* ═════════════════ SOCIAL E TROCA ═════════════════ */
+const REPORT_REASONS = [
+  ["HATE_SPEECH","Discurso de ódio ou discriminação"],
+  ["HARASSMENT","Assédio ou ameaça a morador"],
+  ["SEXUAL_CONTENT","Conteúdo sexual ou impróprio"],
+  ["SPAM","Spam ou propaganda não autorizada"],
+  ["MISINFORMATION","Informação falsa sobre o condomínio"],
+  ["PRIVACY_VIOLATION","Exposição de dados de terceiros"],
+  ["OTHER","Outro motivo"],
+];
+const EMOJIS = ["❤️","😂","😮","🐾","🌟","👏"];
+
+function SocialScreen({ onHome }) {
+  const { allows, posts, setPosts, notify, user } = useLife();
+  const [tab, setTab] = useState("feed");
+  const [messages, setMessages] = useState(MESSAGES);
+  const [draft, setDraft] = useState("");
+  const [target, setTarget] = useState(null);
+  const [reason, setReason] = useState("HATE_SPEECH");
+  const [details, setDetails] = useState("");
+
+  const send = useAction(async () => {
+    const proto = protocolOf("MOD");
+    setPosts(p => p.map(x => x.id===target.id ? {...x, reported:true,
+      status:["HATE_SPEECH","SEXUAL_CONTENT","PRIVACY_VIOLATION"].includes(reason)?"UNDER_REVIEW":x.status} : x));
+    notify(`Denúncia registrada — ${proto}`,"success");
+    setTarget(null); setDetails("");
+  });
+
+  if (!allows("SOCIAL")) return (
+    <Scroll padded={false}>
+      <TopBar title="Social" onHome={onHome}/>
+      <Empty icon="🔒" title="Social desativado"
+        sub="Você revogou o consentimento para o Feed e o Chat. Reative no Portal do Titular para voltar a ver e publicar."/>
+    </Scroll>
+  );
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+      <TopBar title="Social" onHome={onHome}/>
+      <Tabs active={tab} onChange={setTab}
+        tabs={[{id:"feed",label:"Feed"},{id:"chat",label:"Chat"},{id:"rules",label:"Regras"}]}/>
+
+      {tab === "feed" && (
+        <Scroll padded={false}>
+          {posts.map(post => (
+            <div key={post.id} style={{background:T.card,marginBottom:8,padding:14}}>
+              {post.status === "UNDER_REVIEW" && (
+                <LegalNote icon="⏳" color={T.yellow}>
+                  Conteúdo em análise após denúncia. Visível apenas para você até a revisão humana.
+                </LegalNote>
+              )}
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                <Avatar name={post.user.fullName} size={38}/>
+                <div style={{flex:1}}>
+                  <p style={{fontWeight:700,fontSize:14,margin:"0 0 1px"}}>{post.user.fullName}</p>
+                  <p style={{fontSize:11,color:T.muted,margin:0}}>{post.unit} · {post.timeAgo}</p>
+                </div>
+                <button onClick={()=>setTarget(post)} disabled={post.reported}
+                  style={{background:"none",border:"none",cursor:post.reported?"default":"pointer",
+                    fontSize:18,color:T.muted,opacity:post.reported?.4:1,padding:4}}>
+                  {post.reported ? "✓" : "⚑"}
+                </button>
+              </div>
+              {post.mediaUrls[0] && (
+                <div style={{background:T.bg,borderRadius:14,height:170,display:"flex",
+                  alignItems:"center",justifyContent:"center",fontSize:70,marginBottom:10}}>
+                  {post.mediaUrls[0]}</div>
+              )}
+              <p style={{fontSize:14,margin:"0 0 10px",lineHeight:1.5}}>{post.body}</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {EMOJIS.map(e => (
+                  <button key={e} onClick={()=>setPosts(p=>p.map(x=>x.id===post.id
+                    ? {...x,reactions:{...x.reactions,[e]:(x.reactions[e]||0)+1}} : x))}
+                    style={{background:T.bg,border:"none",borderRadius:20,padding:"6px 12px",
+                      fontSize:14,cursor:"pointer"}}>
+                    {e} {post.reactions[e] ? <span style={{fontSize:11,color:T.muted}}>{post.reactions[e]}</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </Scroll>
+      )}
+
+      {tab === "chat" && (
+        <React.Fragment>
+          <Scroll>
+            {messages.map(m => (
+              <div key={m.id} style={{display:"flex",flexDirection:m.mine?"row-reverse":"row",
+                alignItems:"flex-end",gap:8,marginBottom:12}}>
+                {!m.mine && <Avatar name={m.user.fullName} size={28}/>}
+                <div>
+                  {!m.mine && <p style={{fontSize:10,color:T.muted,margin:"0 0 3px"}}>{m.user.fullName}</p>}
+                  <div style={{background:m.mine?T.accent:T.card,color:m.mine?"#fff":T.text,
+                    borderRadius:m.mine?"18px 18px 4px 18px":"18px 18px 18px 4px",padding:"10px 13px",
+                    maxWidth:230,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
+                    <p style={{fontSize:13,margin:"0 0 3px",lineHeight:1.45}}>{m.body}</p>
+                    <p style={{fontSize:9,opacity:.7,margin:0,textAlign:"right"}}>{m.time}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </Scroll>
+          <div style={{display:"flex",gap:8,padding:"10px 14px",background:T.card,
+            borderTop:`1px solid ${T.border}`}}>
+            <Input value={draft} onChange={e=>setDraft(e.target.value)}
+              placeholder="Mensagem para o condomínio…" style={{borderRadius:24}}/>
+            <button onClick={()=>{ if(draft.trim()){
+              setMessages(m=>[...m,{id:Date.now(),body:draft,mine:true,time:"agora",user:{fullName:user.fullName}}]);
+              setDraft(""); }}}
+              style={{background:T.accent,border:"none",borderRadius:24,width:46,color:"#fff",
+                fontSize:18,cursor:"pointer",flexShrink:0}}>↑</button>
+          </div>
+        </React.Fragment>
+      )}
+
+      {tab === "rules" && (
+        <Scroll>
+          <Card style={{background:T.ink,color:"#fff"}}>
+            <p style={{fontWeight:800,fontSize:15,margin:"0 0 6px"}}>Regras de convivência</p>
+            <p style={{fontSize:12.5,opacity:.8,margin:0,lineHeight:1.55}}>
+              O Feed e o Chat são espaços do seu condomínio. Todo conteúdo segue estas regras e o
+              Marco Civil da Internet.
+            </p>
+          </Card>
+          <Heading>O que não é permitido</Heading>
+          {REPORT_REASONS.slice(0,6).map(([id,label])=>(
+            <Card key={id} style={{padding:"12px 14px"}}>
+              <p style={{fontSize:13,margin:0}}>• {label}</p>
+            </Card>
+          ))}
+          <Heading>Como funciona a moderação</Heading>
+          <Card>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {[["1. Denúncia","Qualquer morador denuncia pelo ícone ⚑ na publicação e recebe um protocolo."],
+                ["2. Análise","Denúncias graves ocultam o conteúdo na hora, até a revisão humana em até 48 horas."],
+                ["3. Decisão","O conteúdo é removido ou restaurado. Autor e denunciante são informados com a fundamentação."],
+                ["4. Registro",`Registros de acesso são guardados por ${LEGAL.deadlines.accessLogMonths} meses e só fornecidos mediante ordem judicial (art. 15 do Marco Civil).`]].map(([t,d])=>(
+                <div key={t}>
+                  <p style={{fontWeight:700,fontSize:13,margin:"0 0 3px",color:T.accent}}>{t}</p>
+                  <p style={{fontSize:12.5,margin:0,lineHeight:1.55}}>{d}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <LegalNote icon="🔒">
+            Você controla sua participação: pode desativar o Social a qualquer momento no Portal do
+            Titular, sem perder acesso ao resto do app.
+          </LegalNote>
+        </Scroll>
+      )}
+
+      <Sheet open={!!target} onClose={()=>setTarget(null)} title="Denunciar conteúdo">
+        <p style={{fontSize:12.5,color:T.muted,margin:"0 0 14px",lineHeight:1.55}}>
+          Sua denúncia é analisada por uma pessoa em até 48 horas. Você recebe um número de protocolo.
+        </p>
+        <Field label="Motivo">
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {REPORT_REASONS.map(([id,label])=>(
+              <button key={id} onClick={()=>setReason(id)} style={{textAlign:"left",padding:"11px 14px",
+                borderRadius:12,cursor:"pointer",fontSize:13,
+                border:`1.5px solid ${reason===id?T.accent:T.border}`,
+                background:reason===id?`${T.accent}12`:T.card,
+                color:reason===id?T.accent:T.text,fontWeight:reason===id?600:400}}>{label}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Detalhes (opcional)">
+          <textarea value={details} onChange={e=>setDetails(e.target.value)} rows={3}
+            placeholder="Conte o que aconteceu"
+            style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${T.border}`,
+              fontSize:14,resize:"none",boxSizing:"border-box",outline:"none"}}/>
+        </Field>
+        <Button variant="primary" loading={send.loading} onClick={send.execute}>Enviar denúncia</Button>
+        <Button variant="ghost" onClick={()=>setTarget(null)} style={{marginBottom:0}}>Cancelar</Button>
+      </Sheet>
+    </div>
+  );
+}
+
+function SwapScreen({ onHome }) {
+  const { notify } = useLife();
+  const [items, setItems] = useState(SWAP_ITEMS);
+  const [selected, setSelected] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState({ title:"", description:"", emoji:"📦" });
+  const emojis = ["📦","🎮","👗","📚","🎵","🚲","🍳","🛋️","👟","⌚","🎁","📷","🧸","🎸","⚽","🖥️"];
+
+  if (selected) {
+    const item = items.find(i => i.id === selected.id) || selected;
+    return (
+      <Scroll padded={false}>
+        <TopBar title="Troca Amiga" onBack={()=>setSelected(null)} onHome={onHome}/>
+        <div style={{padding:14}}>
+          <Card style={{textAlign:"center",padding:26}}>
+            <div style={{fontSize:62,marginBottom:12}}>{item.emoji}</div>
+            <p style={{fontWeight:800,fontSize:19,margin:"0 0 6px"}}>{item.title}</p>
+            <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center",marginBottom:10}}>
+              <Avatar name={item.user.fullName} size={26}/>
+              <p style={{fontSize:13,color:T.muted,margin:0}}>{item.user.fullName} · {item.unit}</p>
+            </div>
+            <p style={{fontSize:13,lineHeight:1.55,margin:0}}>{item.description}</p>
+          </Card>
+          <LegalNote icon="🤝" color={T.orange}>{LEGAL.disclaimers.swapNoMoney}</LegalNote>
+          {item.mine && (
+            <div style={{background:`${T.yellow}22`,borderRadius:14,padding:"10px 14px",marginBottom:10}}>
+              <p style={{fontSize:12,color:"#92700A",fontWeight:700,margin:0}}>
+                Este é o seu item. Gerencie as propostas abaixo.</p>
+            </div>
+          )}
+          {item.offers.length > 0 ? (
+            <React.Fragment>
+              <Heading sub={`${item.offers.length} proposta(s)`}>Propostas recebidas</Heading>
+              {item.offers.map(o => (
+                <Card key={o.id} highlight={o.status==="PENDING"}>
+                  <div style={{display:"flex",gap:12,marginBottom:10}}>
+                    <div style={{fontSize:34}}>{o.emoji}</div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                        <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{o.title}</p>
+                        <Badge status={o.status}/>
+                      </div>
+                      <p style={{fontSize:12,color:T.muted,margin:"0 0 4px"}}>{o.user.fullName}</p>
+                      <p style={{fontSize:12,margin:"0 0 4px"}}>{o.description}</p>
+                      <p style={{fontSize:12,color:T.muted,fontStyle:"italic",margin:0}}>"{o.message}"</p>
+                    </div>
+                  </div>
+                  {item.mine && o.status === "PENDING" && (
+                    <div style={{display:"flex",gap:8}}>
+                      <Button variant="green" style={{flex:1,padding:"9px",fontSize:12,marginBottom:0}}
+                        onClick={()=>{ setItems(p=>p.map(i=>i.id===item.id
+                          ? {...i,offers:i.offers.map(x=>x.id===o.id?{...x,status:"ACCEPTED"}:x)} : i));
+                          notify("Troca combinada!","success"); }}>Aceitar</Button>
+                      <Button variant="ghost" style={{flex:1,padding:"9px",fontSize:12,marginBottom:0}}
+                        onClick={()=>setItems(p=>p.map(i=>i.id===item.id
+                          ? {...i,offers:i.offers.map(x=>x.id===o.id?{...x,status:"REJECTED"}:x)} : i))}>Recusar</Button>
+                    </div>
+                  )}
+                  {o.status === "ACCEPTED" && (
+                    <p style={{fontSize:12,color:T.green,fontWeight:700,margin:"6px 0 0"}}>
+                      🎉 Troca combinada — combinem a entrega pelo chat.</p>
+                  )}
+                </Card>
+              ))}
+            </React.Fragment>
+          ) : !item.mine && <Button variant="primary">Propor minha troca</Button>}
+        </div>
+      </Scroll>
+    );
+  }
+
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Troca Amiga" onHome={onHome}
+        right={<button onClick={()=>setShowNew(true)} style={{background:T.accent,border:"none",
+          borderRadius:20,color:"#fff",padding:"7px 13px",fontWeight:700,fontSize:13,
+          cursor:"pointer"}}>+ Publicar</button>}/>
+      <div style={{padding:14}}>
+        <Card style={{background:T.facGrad,color:"#fff"}}>
+          <p style={{fontWeight:800,fontSize:15,margin:"0 0 4px"}}>Troque, não compre</p>
+          <p style={{fontSize:12,opacity:.85,margin:0,lineHeight:1.5}}>
+            Permuta direta entre vizinhos. Sem dinheiro, sem intermediação.</p>
+        </Card>
+        {items.map(item => (
+          <Card key={item.id} onClick={()=>setSelected(item)}>
+            <div style={{display:"flex",gap:14,alignItems:"center"}}>
+              <div style={{fontSize:40,flexShrink:0}}>{item.emoji}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:4}}>
+                  <p style={{fontWeight:700,fontSize:14.5,margin:0}}>{item.title}</p>
+                  {item.mine && <Badge color={T.accent}>Seu item</Badge>}
+                </div>
+                <p style={{fontSize:12,color:T.muted,margin:"0 0 5px"}}>{item.user.fullName} · {item.unit}</p>
+                {item.offers.length > 0 && <Badge color={T.green}>{item.offers.length} proposta(s)</Badge>}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+      <Sheet open={showNew} onClose={()=>setShowNew(false)} title="Publicar para troca">
+        <LegalNote icon="⚠️" color={T.orange}>{LEGAL.disclaimers.swapNoMoney}</LegalNote>
+        <Field label="Ícone do item">
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {emojis.map(e=>(
+              <button key={e} onClick={()=>setForm({...form,emoji:e})} style={{width:42,height:42,
+                borderRadius:12,fontSize:22,cursor:"pointer",
+                border:`2px solid ${form.emoji===e?T.accent:T.border}`,
+                background:form.emoji===e?`${T.accent}15`:T.bg}}>{e}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Nome do item">
+          <Input value={form.title} onChange={e=>setForm({...form,title:e.target.value})}
+            placeholder="Bicicleta aro 26"/>
+        </Field>
+        <Field label="Descrição">
+          <textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})}
+            rows={4} placeholder="Estado de conservação, marca, acessórios inclusos…"
+            style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${T.border}`,
+              fontSize:14,resize:"none",boxSizing:"border-box",outline:"none"}}/>
+        </Field>
+        <Button variant="primary" disabled={!form.title.trim()} onClick={()=>{
+          setItems(p=>[{id:protocolOf("t"),title:form.title,description:form.description,emoji:form.emoji,
+            user:{fullName:"Lucas Ferreira"},unit:"Apto 304",mine:true,offers:[]},...p]);
+          setShowNew(false); setForm({title:"",description:"",emoji:"📦"});
+          notify("Item publicado","success");
+        }}>Publicar</Button>
+      </Sheet>
+    </Scroll>
+  );
+}
+
+/* ═════════════════ TELAS JURÍDICAS ═════════════════ */
+const TERMS = [
+  ["1. Quem somos", `O LIFE é operado por ${LEGAL.controller.legalName}, CNPJ ${LEGAL.controller.cnpj}. É uma plataforma de intermediação — não é banco, não é instituição financeira e não administra condomínios.`],
+  ["2. Contratação pelo condomínio", LEGAL.disclaimers.assemblyRequired],
+  ["3. Marketplace e responsabilidade", LEGAL.disclaimers.marketplaceLiability],
+  ["4. Direito de arrependimento", `Você tem ${LEGAL.deadlines.withdrawalDays} dias corridos para desistir de compras feitas no app, contados da entrega, sem justificar (CDC art. 49). Reembolso integral, incluindo frete. O cashback gerado é estornado.`],
+  ["5. Pagamentos", LEGAL.disclaimers.notAFinancialInstitution],
+  ["6. LifeWallet", LEGAL.disclaimers.walletNotCashable],
+  ["7. Cancelamento de serviços", `Agendamentos podem ser cancelados sem custo até ${LEGAL.deadlines.serviceCancelHours} horas antes. Após esse prazo há retenção de 30% referente à reserva de agenda. Cancelamento pelo prestador gera reembolso integral.`],
+  ["8. Conteúdo do usuário", `Você responde pelo que publica. Conteúdo ilegal ou ofensivo pode ser removido após denúncia. Guardamos registros de acesso por ${LEGAL.deadlines.accessLogMonths} meses (art. 15 do Marco Civil) e só os fornecemos mediante ordem judicial.`],
+  ["9. Troca Amiga", LEGAL.disclaimers.swapNoMoney],
+  ["10. Menores de idade", "Cadastro restrito a maiores de 18 anos. Dados de menores só são tratados com consentimento específico do responsável, no melhor interesse da criança (art. 14 da LGPD)."],
+  ["11. Foro", "Fica eleito o foro do domicílio do consumidor (art. 101, I, do CDC)."],
+];
+const PRIVACY = [
+  ["Controlador", `${LEGAL.controller.legalName} — CNPJ ${LEGAL.controller.cnpj} — ${LEGAL.controller.address}`],
+  ["Encarregado (DPO)", `${LEGAL.dpo.name} — ${LEGAL.dpo.credential} — ${LEGAL.dpo.email} — ${LEGAL.dpo.phone}`],
+  ["Dados que coletamos", "Cadastrais (nome, e-mail, telefone, unidade), transacionais (compras, boletos, cashback), de uso, de conteúdo (posts, mensagens, ocorrências) e registros de acesso (IP e horário)."],
+  ["Finalidade e base legal", "Cada dado tem finalidade declarada e base legal própria: execução de contrato, obrigação legal, legítimo interesse ou consentimento. Veja e revogue cada um no Portal do Titular."],
+  ["Compartilhamento", "Apenas com: o condomínio onde você reside, o processador de pagamento autorizado pelo BACEN, lojas com pedido seu, e autoridades mediante ordem judicial. Nunca vendemos dados."],
+  ["Decisões automatizadas", "O Fofoca do Bem usa algoritmo para sugerir afinidades. Você pode pedir revisão humana e explicação dos critérios (art. 20 da LGPD e Portaria ANPD 5/2024)."],
+  ["Retenção", "Cadastrais: enquanto durar a conta. Fiscais e de cobrança: 5 anos. Registros de acesso: 6 meses. Conteúdo social: até você excluir."],
+  ["Seus direitos", `Confirmação, acesso, correção, anonimização, portabilidade, eliminação, revogação e informação sobre compartilhamento. Prazo de resposta: ${LEGAL.deadlines.dsarDays} dias.`],
+  ["Servidores", "Dados hospedados no Brasil (São Paulo). Não há transferência internacional."],
+  ["Reclamações", "Você pode reclamar à ANPD em gov.br/anpd."],
+];
+
+function DocumentScreen({ kind, onBack, onHome }) {
+  const isTerms = kind === "terms";
+  return (
+    <Scroll padded={false}>
+      <TopBar title={isTerms?"Termos de Uso":"Política de Privacidade"} onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{background:T.ink,color:"#fff"}}>
+          <p style={{fontSize:11,opacity:.65,margin:"0 0 4px",letterSpacing:.5}}>DOCUMENTO VIGENTE</p>
+          <p style={{fontWeight:800,fontSize:16,margin:"0 0 6px"}}>
+            {isTerms?"Termos de Uso":"Política de Privacidade"}</p>
+          <p style={{fontSize:12,opacity:.75,margin:0}}>
+            Versão {LEGAL.policyVersion} — desde {LEGAL.policyEffectiveDate}</p>
+        </Card>
+        {(isTerms?TERMS:PRIVACY).map(([t,b])=>(
+          <Card key={t}>
+            <p style={{fontWeight:800,fontSize:13.5,margin:"0 0 6px",color:T.accent}}>{t}</p>
+            <p style={{fontSize:13,margin:0,lineHeight:1.65}}>{b}</p>
+          </Card>
+        ))}
+      </div>
+    </Scroll>
+  );
+}
+
+function PrivacyPortal({ onBack, onHome }) {
+  const { purposes, consents, setConsent, notify, user } = useLife();
+  const [view, setView] = useState("main");
+  const [confirmText, setConfirmText] = useState("");
+  const [exported, setExported] = useState(null);
+
+  const doExport = useAction(async () => {
+    const pkg = {
+      _meta:{ format:"LIFE Data Export v1", generatedAt:new Date().toISOString(),
+        policyVersion:LEGAL.policyVersion, controller:LEGAL.controller, dpo:LEGAL.dpo,
+        legalBasis:"LGPD art. 18, V — portabilidade" },
+      identity:{ fullName:user.fullName, email:user.email, unit:user.unit, cpf:"***.***.789-**" },
+      consents, orders:ORDERS, invoices:INVOICES, wallet:WALLET_ENTRIES,
+      social:{ posts:POSTS.filter(p=>p.user.fullName===user.fullName) },
+      sharedWith:[
+        { recipient:"Condomínio", data:"Unidade, boletos e ocorrências", basis:"Execução de contrato" },
+        { recipient:"Processador de pagamento (BACEN)", data:"Nome, CPF e valor", basis:"Execução de contrato" },
+        { recipient:"Lojas com pedido seu", data:"Nome e endereço de entrega", basis:"Execução de contrato" },
+      ],
+    };
+    setExported({ protocol:protocolOf("TIT"),
+      filename:`life_dados_${user.id}_${new Date().toISOString().slice(0,10)}.json`, data:pkg });
+    notify("Arquivo de portabilidade gerado","success");
+  });
+
+  const doDelete = useAction(async () => setView("deleted"));
+  const doReview = useAction(async () => notify(`Revisão solicitada — ${protocolOf("REV")}`,"success"));
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(exported.data,null,2)], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement("a"), { href:url, download:exported.filename });
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  if (view === "deleted") return (
+    <Scroll padded={false}>
+      <TopBar title="Solicitação registrada" onHome={onHome}/>
+      <Empty icon="📋" title="Solicitação registrada"
+        sub={`Sua conta será eliminada em até ${LEGAL.deadlines.dsarDays} dias. Você receberá confirmação por e-mail. Para desistir, fale com o DPO em ${LEGAL.dpo.email}.`}
+        action={<Button variant="primary" onClick={onHome}>Voltar ao início</Button>}/>
+    </Scroll>
+  );
+
+  if (view === "delete") return (
+    <Scroll padded={false}>
+      <TopBar title="Excluir minha conta" onBack={()=>setView("main")} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{background:`${T.red}0D`,border:`1.5px solid ${T.red}44`}}>
+          <p style={{fontWeight:800,fontSize:15,margin:"0 0 8px",color:T.red}}>Esta ação é irreversível</p>
+          <p style={{fontSize:13,margin:0,lineHeight:1.6}}>
+            Iniciamos a eliminação dos seus dados conforme art. 18, VI da LGPD.
+            Prazo: até {LEGAL.deadlines.dsarDays} dias.
+          </p>
+        </Card>
+        <Card>
+          <p style={{fontWeight:700,fontSize:13,margin:"0 0 10px"}}>O que será eliminado</p>
+          {["Dados cadastrais e foto","Publicações e mensagens","Histórico de compras e saldo de cashback",
+            "Itens da Troca Amiga","Preferências e consentimentos"].map(i=>(
+            <p key={i} style={{fontSize:12.5,margin:"0 0 6px",display:"flex",gap:8}}>
+              <span style={{color:T.red}}>✕</span>{i}</p>
+          ))}
+        </Card>
+        <Card style={{background:`${T.yellow}0D`,border:`1px solid ${T.yellow}44`}}>
+          <p style={{fontWeight:700,fontSize:13,margin:"0 0 10px"}}>O que a lei nos obriga a manter</p>
+          {RETENTION_RULES.map(r=>(
+            <div key={r.entity} style={{marginBottom:8}}>
+              <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 2px"}}>
+                {r.entity} — {r.years?`${r.years} anos`:`${r.months} meses`}</p>
+              <p style={{fontSize:11.5,color:T.muted,margin:0}}>{r.basis}</p>
+            </div>
+          ))}
+          <p style={{fontSize:11.5,color:T.muted,margin:"8px 0 0",lineHeight:1.5}}>
+            Ficam bloqueados: usados só para cumprir a obrigação legal, sem nenhum outro tratamento.
+          </p>
+        </Card>
+        <Field label="Digite EXCLUIR para confirmar">
+          <Input value={confirmText} onChange={e=>setConfirmText(e.target.value)} placeholder="EXCLUIR"
+            style={{textAlign:"center",fontWeight:700,letterSpacing:2}}/>
+        </Field>
+        <Button variant="red" disabled={confirmText!=="EXCLUIR"} loading={doDelete.loading}
+          onClick={doDelete.execute}>Confirmar exclusão definitiva</Button>
+        <Button variant="ghost" onClick={()=>setView("main")}>Cancelar</Button>
+      </div>
+    </Scroll>
+  );
+
+  if (view === "algorithm") return (
+    <Scroll padded={false}>
+      <TopBar title="Decisão automatizada" onBack={()=>setView("main")} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <LegalNote icon="🤖">
+          Art. 20 da LGPD: você pode pedir revisão humana de decisões tomadas por algoritmo que
+          afetem seus interesses.
+        </LegalNote>
+        <Card>
+          <p style={{fontWeight:800,fontSize:14,margin:"0 0 8px"}}>Como o Fofoca do Bem funciona</p>
+          <p style={{fontSize:13,lineHeight:1.65,margin:"0 0 12px"}}>
+            O algoritmo compara categorias de interesse declaradas por você com as de outros moradores
+            que também ativaram a função. Nenhuma identidade é revelada sem aceite mútuo.
+          </p>
+          <Divider/>
+          <p style={{fontWeight:700,fontSize:13,margin:"8px 0"}}>Critérios e pesos</p>
+          {PROFILING_CRITERIA.map(c=>(
+            <div key={c.factor} style={{marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontSize:12.5}}>{c.factor}</span>
+                <span style={{fontSize:12,fontWeight:700,color:T.accent}}>{Math.round(c.weight*100)}%</span>
+              </div>
+              <div style={{height:5,background:T.bg,borderRadius:4,overflow:"hidden"}}>
+                <div style={{width:`${c.weight*100}%`,height:"100%",background:T.accent,borderRadius:4}}/>
+              </div>
+            </div>
+          ))}
+          <Divider/>
+          <p style={{fontWeight:700,fontSize:13,margin:"8px 0 6px"}}>Nunca usamos</p>
+          <p style={{fontSize:12,color:T.muted,margin:0,lineHeight:1.6}}>{PROFILING_FORBIDDEN.join(" · ")}</p>
+        </Card>
+        <Button variant="primary" loading={doReview.loading} onClick={doReview.execute}>
+          Solicitar revisão humana</Button>
+      </div>
+    </Scroll>
+  );
+
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Portal do Titular" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{background:T.walletGrad,color:"#fff"}}>
+          <p style={{fontSize:11,opacity:.8,margin:"0 0 4px",letterSpacing:.5}}>SEUS DIREITOS · LEI 13.709/2020</p>
+          <p style={{fontWeight:800,fontSize:17,margin:"0 0 6px"}}>Portal do Titular</p>
+          <p style={{fontSize:12.5,opacity:.85,margin:0,lineHeight:1.5}}>
+            Controle total sobre seus dados. Resposta em até {LEGAL.deadlines.dsarDays} dias.</p>
+        </Card>
+
+        <Heading sub="Revogue quando quiser — sem perder acesso ao app">Meus consentimentos</Heading>
+        {purposes.map(p => (
+          <Card key={p.id}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 3px"}}>{p.label}</p>
+                <p style={{fontSize:11,color:T.accent,margin:"0 0 6px",fontWeight:600}}>{p.legalRef}</p>
+                <p style={{fontSize:12,color:T.muted,margin:0,lineHeight:1.5}}>{p.description}</p>
+              </div>
+              {p.required
+                ? <Badge color={T.muted}>Obrigatório</Badge>
+                : <Toggle checked={!!consents[p.id]} label={p.label} onChange={v=>setConsent(p.id,v)}/>}
+            </div>
+            {p.automatedDecision && consents[p.id] && (
+              <Button variant="soft" style={{marginTop:10,marginBottom:0,padding:"9px",fontSize:12}}
+                onClick={()=>setView("algorithm")}>Ver critérios do algoritmo e pedir revisão</Button>
+            )}
+          </Card>
+        ))}
+
+        <Heading>Exercer meus direitos</Heading>
+        <Card>
+          <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 4px"}}>Portabilidade de dados</p>
+          <p style={{fontSize:12,color:T.muted,margin:"0 0 10px",lineHeight:1.5}}>
+            Baixe tudo em JSON legível por máquina (art. 18, V).</p>
+          {!exported ? (
+            <Button variant="primary" loading={doExport.loading} onClick={doExport.execute}
+              style={{marginBottom:0}}>Exportar meus dados</Button>
+          ) : (
+            <div style={{background:`${T.green}11`,borderRadius:12,padding:12}}>
+              <p style={{fontSize:12.5,color:T.green,fontWeight:700,margin:"0 0 4px"}}>Arquivo pronto</p>
+              <p style={{fontSize:11,color:T.muted,margin:"0 0 8px",fontFamily:"monospace",
+                wordBreak:"break-all"}}>{exported.filename}</p>
+              <Button variant="green" onClick={download} style={{marginBottom:0,padding:"10px"}}>
+                Baixar arquivo</Button>
+            </div>
+          )}
+        </Card>
+        <Card>
+          <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 4px"}}>Quem acessou meus dados</p>
+          <p style={{fontSize:12,color:T.muted,margin:"0 0 10px",lineHeight:1.5}}>
+            Relatório de compartilhamento (art. 18, VII).</p>
+          <div style={{background:T.bg,borderRadius:12,padding:12}}>
+            {[["Condomínio","Unidade, boletos e ocorrências","Execução de contrato"],
+              ["Processador de pagamento (BACEN)","Nome, CPF e valor","Execução de contrato"],
+              ["Lojas com pedido seu","Nome e endereço de entrega","Execução de contrato"]].map(([r,d,b])=>(
+              <div key={r} style={{marginBottom:8}}>
+                <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 2px"}}>{r}</p>
+                <p style={{fontSize:11,color:T.muted,margin:0}}>{d} · base: {b}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card style={{border:`1px solid ${T.red}33`}}>
+          <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 4px",color:T.red}}>Eliminar meus dados</p>
+          <p style={{fontSize:12,color:T.muted,margin:"0 0 10px",lineHeight:1.5}}>
+            Exclui a conta e tudo que não estiver sujeito a guarda legal (art. 18, VI).</p>
+          <Button variant="red" onClick={()=>setView("delete")} style={{marginBottom:0}}>
+            Solicitar exclusão</Button>
+        </Card>
+        <Card style={{background:T.ink,color:"#fff"}}>
+          <p style={{fontWeight:700,fontSize:13.5,margin:"0 0 8px"}}>Encarregado de Dados (DPO)</p>
+          <p style={{fontSize:13,margin:"0 0 2px"}}>{LEGAL.dpo.name}</p>
+          <p style={{fontSize:12,opacity:.7,margin:"0 0 2px"}}>{LEGAL.dpo.credential}</p>
+          <p style={{fontSize:13,color:T.accentL,margin:"0 0 2px",fontWeight:600}}>{LEGAL.dpo.email}</p>
+          <p style={{fontSize:12,opacity:.7,margin:"0 0 10px"}}>{LEGAL.dpo.phone}</p>
+          <p style={{fontSize:11.5,opacity:.55,margin:0}}>Não resolvido? Reclame à ANPD em gov.br/anpd</p>
+        </Card>
+      </div>
+    </Scroll>
+  );
+}
+
+function SupportScreen({ onBack, onHome }) {
+  const [kind, setKind] = useState("COMPLAINT");
+  const [body, setBody] = useState("");
+  const [result, setResult] = useState(null);
+  const open = useAction(async () => setResult({ protocol:protocolOf("SAC") }));
+  const kinds = [["COMPLAINT","Reclamação"],["CANCELLATION","Cancelamento"],
+    ["INFORMATION","Informação"],["REPORT","Denúncia"],["PRAISE","Elogio"]];
+
+  if (result) return (
+    <Scroll padded={false}>
+      <TopBar title="SAC" onHome={onHome}/>
+      <Empty icon="📞" title="Protocolo aberto"
+        sub={`${result.protocol} — resposta em até ${LEGAL.sac.responseDays} dias (Decreto 11.034/2022).`}
+        action={<Button variant="primary" onClick={onHome}>Voltar ao início</Button>}/>
+    </Scroll>
+  );
+
+  return (
+    <Scroll padded={false}>
+      <TopBar title="SAC · Atendimento" onBack={onBack} onHome={onHome}/>
+      <div style={{padding:14}}>
+        <Card style={{background:T.mktGrad,color:"#fff"}}>
+          <p style={{fontSize:11,opacity:.8,margin:"0 0 4px"}}>ATENDIMENTO AO CONSUMIDOR</p>
+          <p style={{fontWeight:900,fontSize:22,margin:"0 0 6px"}}>{LEGAL.sac.phone}</p>
+          <p style={{fontSize:12,opacity:.85,margin:0}}>{LEGAL.sac.hours} · Gratuito</p>
+        </Card>
+        <LegalNote icon="⚖️" color={T.orange}>{LEGAL.disclaimers.marketplaceLiability}</LegalNote>
+        <Card>
+          <Field label="Tipo de solicitação">
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {kinds.map(([id,label])=>(
+                <button key={id} onClick={()=>setKind(id)} style={{padding:"8px 14px",borderRadius:20,
+                  cursor:"pointer",fontSize:12.5,fontWeight:600,
+                  border:`1.5px solid ${kind===id?T.accent:T.border}`,
+                  background:kind===id?`${T.accent}15`:T.card,color:kind===id?T.accent:T.text}}>{label}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Descreva sua solicitação">
+            <textarea value={body} onChange={e=>setBody(e.target.value)} rows={5}
+              placeholder="Conte o que aconteceu com o máximo de detalhes."
+              style={{width:"100%",padding:"12px 14px",borderRadius:12,border:`1.5px solid ${T.border}`,
+                fontSize:14,resize:"none",boxSizing:"border-box",outline:"none"}}/>
+          </Field>
+          <Button variant="primary" disabled={body.trim().length<10} loading={open.loading}
+            onClick={open.execute} style={{marginBottom:0}}>Abrir protocolo</Button>
+        </Card>
+        <Card>
+          <p style={{fontWeight:700,fontSize:13,margin:"0 0 10px"}}>Outros canais</p>
+          {[["E-mail",LEGAL.sac.email],["DPO (dados pessoais)",LEGAL.dpo.email],
+            ["Consumidor.gov.br","Plataforma oficial"],["Procon","Defesa do consumidor"]].map(([k,v])=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:8}}>
+              <span style={{fontSize:12.5}}>{k}</span>
+              <span style={{fontSize:12,color:T.muted,textAlign:"right"}}>{v}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </Scroll>
+  );
+}
+
+function LegalHub({ navigate, onBack }) {
+  const items = [
+    { icon:"🛡️", title:"Portal do Titular", sub:"Exportar, corrigir ou excluir seus dados", to:"privacy_portal", color:T.accent },
+    { icon:"📜", title:"Termos de Uso", sub:`Versão ${LEGAL.policyVersion}`, to:"terms", color:T.blue },
+    { icon:"🔒", title:"Política de Privacidade", sub:`Versão ${LEGAL.policyVersion}`, to:"privacy", color:T.green },
+    { icon:"📞", title:"SAC", sub:LEGAL.sac.phone, to:"support", color:T.orange },
+    { icon:"↩️", title:"Direito de Arrependimento", sub:"7 dias — art. 49 do CDC", to:"withdrawal", color:T.pink },
+  ];
+  return (
+    <Scroll padded={false}>
+      <TopBar title="Central Jurídica" onBack={onBack}/>
+      <div style={{padding:14}}>
+        <Card style={{background:T.ink,color:"#fff"}}>
+          <p style={{fontWeight:800,fontSize:16,margin:"0 0 6px"}}>Transparência total</p>
+          <p style={{fontSize:12.5,opacity:.8,margin:0,lineHeight:1.55}}>
+            Todos os documentos, direitos e canais previstos na LGPD, no CDC e no Marco Civil, em um só lugar.
+          </p>
+        </Card>
+        {items.map(i=>(
+          <Card key={i.to} onClick={()=>navigate(i.to)}>
+            <div style={{display:"flex",alignItems:"center",gap:14}}>
+              <div style={{width:44,height:44,borderRadius:12,background:i.color+"1A",display:"flex",
+                alignItems:"center",justifyContent:"center",fontSize:21,flexShrink:0}}>{i.icon}</div>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:700,fontSize:14,margin:"0 0 2px"}}>{i.title}</p>
+                <p style={{fontSize:11.5,color:T.muted,margin:0}}>{i.sub}</p>
+              </div>
+              <span style={{color:T.muted,fontSize:18}}>›</span>
+            </div>
+          </Card>
+        ))}
+        <Card style={{background:T.bg}}>
+          <p style={{fontSize:11,fontWeight:700,color:T.muted,textTransform:"uppercase",
+            letterSpacing:1,margin:"0 0 8px"}}>Controlador</p>
+          <p style={{fontSize:12.5,fontWeight:600,margin:"0 0 2px"}}>{LEGAL.controller.legalName}</p>
+          <p style={{fontSize:11.5,color:T.muted,margin:"0 0 2px"}}>CNPJ {LEGAL.controller.cnpj}</p>
+          <p style={{fontSize:11.5,color:T.muted,margin:0}}>{LEGAL.controller.address}</p>
+        </Card>
+      </div>
+    </Scroll>
+  );
+}
+
+/* ═════════════════ PRIMITIVOS DESKTOP ═════════════════ */
+const Panel = ({ children, style={}, accent, onClick }) => (
+  <div onClick={onClick} style={{background:D.s1,border:`1px solid ${D.border}`,borderRadius:16,
+    padding:20,cursor:onClick?"pointer":"default",
+    ...(accent?{borderTop:`2px solid ${accent}`}:{}),...style}}>{children}</div>
+);
+const DBadge = ({ children, status, color }) => {
+  const c = color || SC[status] || T.accent;
+  return <span style={{background:c+"26",color:c,borderRadius:20,padding:"3px 10px",fontSize:11,
+    fontWeight:700,whiteSpace:"nowrap"}}>{children || SL[status] || status}</span>;
+};
+const DButton = ({ children, onClick, variant="primary", disabled, loading, style={} }) => {
+  const v = { primary:{background:T.accent,color:"#fff"},
+    ghost:{background:D.s2,color:D.text,border:`1px solid ${D.border}`},
+    green:{background:T.green,color:"#fff"}, red:{background:T.red,color:"#fff"} }[variant] || {};
+  return <button onClick={onClick} disabled={disabled||loading} style={{border:"none",borderRadius:10,
+    padding:"9px 16px",fontWeight:700,fontSize:13,cursor:(disabled||loading)?"not-allowed":"pointer",
+    opacity:(disabled||loading)?.5:1,display:"inline-flex",alignItems:"center",gap:6,...v,...style}}>
+    {loading?"Aguarde…":children}</button>;
+};
+const KPI = ({ label, value, change, sub, accent=T.accent }) => (
+  <Panel accent={accent}>
+    <div style={{fontSize:11,fontWeight:700,color:D.muted,textTransform:"uppercase",
+      letterSpacing:.8,marginBottom:8}}>{label}</div>
+    <div style={{fontSize:26,fontWeight:900,letterSpacing:-1,color:D.text,marginBottom:4}}>{value}</div>
+    {change && <div style={{fontSize:12,fontWeight:600,
+      color:change.startsWith("▲")?T.green:change.startsWith("▼")?T.red:D.muted}}>{change}</div>}
+    {sub && <div style={{fontSize:11.5,color:D.muted,marginTop:2}}>{sub}</div>}
+  </Panel>
+);
+const Bars = ({ data, height=130 }) => {
+  const max = Math.max(...data.map(d=>d.v),1);
+  return <div style={{display:"flex",alignItems:"flex-end",gap:6,height,paddingTop:16}}>
+    {data.map((d,i)=>(
+      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+        <div title={fmtBRL(d.v)} style={{width:"100%",minHeight:4,height:`${(d.v/max)*100}%`,
+          borderRadius:"6px 6px 0 0",transition:"height .5s ease",
+          background:d.hi?`linear-gradient(180deg,${T.accent},${T.accentD})`:D.s3}}/>
+        <span style={{fontSize:9.5,color:d.hi?T.accentL:D.muted}}>{d.l}</span>
+      </div>
+    ))}
+  </div>;
+};
+const Progress = ({ pct, color=T.accent }) => (
+  <div style={{height:6,background:D.s2,borderRadius:4,overflow:"hidden",marginTop:6}}>
+    <div style={{width:`${Math.min(100,pct)}%`,height:"100%",background:color,borderRadius:4,
+      transition:"width .5s ease"}}/>
+  </div>
+);
+const DTable = ({ columns, rows, empty="Nenhum registro" }) => (
+  <div style={{overflowX:"auto"}}>
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+      <thead><tr>{columns.map(c=>(
+        <th key={c} style={{textAlign:"left",padding:"10px 14px",fontSize:11,fontWeight:700,
+          color:D.muted,textTransform:"uppercase",letterSpacing:.8,
+          borderBottom:`1px solid ${D.border}`,whiteSpace:"nowrap"}}>{c}</th>
+      ))}</tr></thead>
+      <tbody>
+        {rows.length===0 ? (
+          <tr><td colSpan={columns.length} style={{padding:"28px 14px",textAlign:"center",
+            color:D.muted}}>{empty}</td></tr>
+        ) : rows.map((row,ri)=>(
+          <tr key={ri} style={{borderBottom:`1px solid ${D.border}`}}
+            onMouseEnter={e=>e.currentTarget.style.background=D.s2}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            {row.map((cell,ci)=><td key={ci} style={{padding:"12px 14px",color:D.text}}>{cell}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+const SectionTitle = ({ children, sub, action }) => (
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+    <div>
+      <div style={{fontSize:15,fontWeight:700,color:D.text}}>{children}</div>
+      {sub && <div style={{fontSize:12,color:D.muted,marginTop:2}}>{sub}</div>}
+    </div>
+    {action}
+  </div>
+);
+const DField = ({ label, hint, error, children }) => (
+  <div style={{marginBottom:16}}>
+    {label && <div style={{fontSize:12,fontWeight:600,color:D.muted,marginBottom:6}}>{label}</div>}
+    {children}
+    {hint && !error && <div style={{fontSize:11.5,color:D.muted,marginTop:5,lineHeight:1.5}}>{hint}</div>}
+    {error && <div style={{fontSize:12,color:T.red,marginTop:5}}>{error}</div>}
+  </div>
+);
+const dInput = (err) => ({ width:"100%",background:D.s2,border:`1px solid ${err?T.red:D.border}`,
+  borderRadius:10,padding:"10px 14px",color:D.text,fontSize:13.5,outline:"none",boxSizing:"border-box" });
+const DInput = ({ error, style={}, ...p }) => <input {...p} style={{...dInput(error),...style}}/>;
+const DSelect = ({ error, options=[], style={}, ...p }) => (
+  <select {...p} style={{...dInput(error),appearance:"none",...style}}>
+    {options.map(o => typeof o==="string"
+      ? <option key={o} value={o}>{o}</option>
+      : <option key={o.value} value={o.value}>{o.label}</option>)}
+  </select>
+);
+const DTextarea = ({ error, style={}, ...p }) => (
+  <textarea {...p} style={{...dInput(error),resize:"vertical",minHeight:80,...style}}/>
+);
+const DModal = ({ open, onClose, title, subtitle, children, width=540 }) => {
+  if (!open) return null;
+  return <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,
+    background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",
+    justifyContent:"center",zIndex:1000,padding:20}}>
+    <div className="fade" style={{background:D.s1,border:`1px solid ${D.border2}`,borderRadius:18,
+      padding:26,width,maxWidth:"100%",maxHeight:"84vh",overflowY:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:800,color:D.text}}>{title}</div>
+          {subtitle && <div style={{fontSize:12.5,color:D.muted,marginTop:4,lineHeight:1.5}}>{subtitle}</div>}
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",
+          color:D.muted,fontSize:22,lineHeight:1}}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>;
+};
+const DLegal = ({ children, icon="⚖️", tone="accent" }) => {
+  const c = { accent:T.accent, warn:T.yellow, danger:T.red, ok:T.green }[tone] || T.accent;
+  return <div style={{background:c+"14",border:`1px solid ${c}40`,borderRadius:12,padding:"11px 13px",
+    marginBottom:14,display:"flex",gap:10}}>
+    <span style={{fontSize:15,flexShrink:0}}>{icon}</span>
+    <p style={{fontSize:11.5,color:D.text,margin:0,lineHeight:1.6}}>{children}</p>
+  </div>;
+};
+const Donut = ({ segments, size=96 }) => {
+  const total = segments.reduce((s,x)=>s+x.value,0) || 1;
+  const r = size/2 - 7, circ = 2*Math.PI*r;
+  let off = 0;
+  return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={D.s2} strokeWidth={13}/>
+    {segments.map((s,i)=>{
+      const len = (s.value/total)*circ;
+      const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={s.color}
+        strokeWidth={13} strokeDasharray={`${len} ${circ-len}`} strokeDashoffset={-off}
+        transform={`rotate(-90 ${size/2} ${size/2})`}/>;
+      off += len; return el;
+    })}
+  </svg>;
+};
+
+/* ═════════════════ MODAIS DO PAINEL ═════════════════ */
+function IssueInvoiceModal({ open, onClose }) {
+  const { notify } = useLife();
+  const [f, setF] = useState({ type:"MONTHLY_FEE", description:"", amount:"", dueDate:"",
+    target:"ALL", assemblyRef:"", legalBasis:"" });
+  const [errors, setErrors] = useState({});
+  const needsAssembly = f.type === "EXTRA_FEE" || f.type === "RESERVE_FUND";
+
+  const submit = useAction(async () => {
+    const e = {};
+    if (!f.description.trim()) e.description = "Descreva a cobrança";
+    if (!(Number(f.amount) > 0)) e.amount = "Informe um valor válido";
+    if (!f.dueDate) e.dueDate = "Informe o vencimento";
+    if (needsAssembly && !f.assemblyRef.trim())
+      e.assemblyRef = "Obrigatório: identifique a ata que aprovou esta cobrança";
+    setErrors(e);
+    if (Object.keys(e).length) { notify("Corrija os campos destacados","error"); return; }
+    notify(`120 boletos de ${fmtBRL(toCents(f.amount))} emitidos e notificados`,"success");
+    onClose();
+  });
+
+  return (
+    <DModal open={open} onClose={onClose} title="Emitir boleto"
+      subtitle="Os boletos são gerados pelo processador autorizado pelo BACEN e notificados aos moradores.">
+      <DField label="Tipo de cobrança">
+        <DSelect value={f.type} onChange={e=>setF({...f,type:e.target.value})} options={[
+          { value:"MONTHLY_FEE", label:"Taxa condominial mensal" },
+          { value:"EXTRA_FEE", label:"Taxa extra" },
+          { value:"RESERVE_FUND", label:"Fundo de reserva" },
+          { value:"FINE", label:"Multa" },
+        ]}/>
+      </DField>
+      {needsAssembly && (
+        <React.Fragment>
+          <DLegal icon="🏛️" tone="warn">
+            Cobranças extraordinárias dependem de aprovação em assembleia geral (art. 1.348 do Código
+            Civil; quórum de 2/3 conforme a Lei 14.405/2022). Sem a referência da ata, a emissão é bloqueada.
+          </DLegal>
+          <DField label="Ata que aprovou a cobrança" error={errors.assemblyRef}
+            hint="Exemplo: AGE de 18/03/2026 — quórum 2/3 (86 de 120 unidades)">
+            <DInput value={f.assemblyRef} error={errors.assemblyRef}
+              onChange={e=>setF({...f,assemblyRef:e.target.value})} placeholder="AGE de 00/00/0000"/>
+          </DField>
+        </React.Fragment>
+      )}
+      <DField label="Descrição" error={errors.description}>
+        <DInput value={f.description} error={errors.description}
+          onChange={e=>setF({...f,description:e.target.value})} placeholder="Condomínio — Novembro/2026"/>
+      </DField>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <DField label="Valor por unidade (R$)" error={errors.amount}>
+          <DInput type="number" step="0.01" value={f.amount} error={errors.amount}
+            onChange={e=>setF({...f,amount:e.target.value})} placeholder="850,00"/>
+        </DField>
+        <DField label="Vencimento" error={errors.dueDate}>
+          <DInput type="date" value={f.dueDate} error={errors.dueDate}
+            onChange={e=>setF({...f,dueDate:e.target.value})}/>
+        </DField>
+      </div>
+      <DField label="Destinatários">
+        <DSelect value={f.target} onChange={e=>setF({...f,target:e.target.value})} options={[
+          { value:"ALL", label:"Todas as unidades (120)" },
+          { value:"OVERDUE", label:"Somente unidades em atraso (15)" },
+        ]}/>
+      </DField>
+      <DField label="Base legal do rateio"
+        hint="Aparece para o morador junto ao boleto, garantindo transparência sobre o critério de divisão.">
+        <DInput value={f.legalBasis} onChange={e=>setF({...f,legalBasis:e.target.value})}
+          placeholder="Art. 1.336, I do Código Civil — rateio por fração ideal"/>
+      </DField>
+      <div style={{display:"flex",gap:10,marginTop:22}}>
+        <DButton variant="ghost" onClick={onClose} style={{flex:1,justifyContent:"center"}}>Cancelar</DButton>
+        <DButton variant="primary" loading={submit.loading} onClick={submit.execute}
+          style={{flex:2,justifyContent:"center"}}>Emitir e notificar</DButton>
+      </div>
+    </DModal>
+  );
+}
+
+function NewCondominiumModal({ open, onClose }) {
+  const { notify } = useLife();
+  const [f, setF] = useState({ name:"", cnpj:"", cep:"", cidade:"", uf:"", unitsTotal:"",
+    plan:"PRO", managerEmail:"", assemblyDate:"", assemblyQuorum:"" });
+  const [errors, setErrors] = useState({});
+
+  const submit = useAction(async () => {
+    const e = {};
+    if (!f.name.trim()) e.name = "Informe o nome";
+    if (!isValidCNPJ(f.cnpj)) e.cnpj = "CNPJ inválido — o dígito verificador não confere";
+    if (!(Number(f.unitsTotal) > 0)) e.unitsTotal = "Informe o número de unidades";
+    if (!isValidEmail(f.managerEmail)) e.managerEmail = "E-mail do síndico inválido";
+    setErrors(e);
+    if (Object.keys(e).length) { notify("Corrija os campos destacados","error"); return; }
+    notify(f.assemblyDate ? "Condomínio cadastrado e contrato ativo"
+      : "Cadastrado — faturamento bloqueado até o registro da ata","success");
+    onClose();
+  });
+
+  return (
+    <DModal open={open} onClose={onClose} title="Cadastrar condomínio"
+      subtitle="O contrato só entra em vigor após comprovação da aprovação em assembleia.">
+      <DLegal icon="🏛️" tone="warn">{LEGAL.disclaimers.assemblyRequired}</DLegal>
+      <DField label="Nome do condomínio" error={errors.name}>
+        <DInput value={f.name} error={errors.name} onChange={e=>setF({...f,name:e.target.value})}
+          placeholder="Residencial Alto das Flores"/>
+      </DField>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <DField label="CNPJ" error={errors.cnpj}>
+          <DInput value={maskCNPJ(f.cnpj)} error={errors.cnpj}
+            onChange={e=>setF({...f,cnpj:e.target.value})} placeholder="00.000.000/0001-00"/>
+        </DField>
+        <DField label="CEP">
+          <DInput value={maskCEP(f.cep)} onChange={e=>setF({...f,cep:e.target.value})} placeholder="00000-000"/>
+        </DField>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:12}}>
+        <DField label="Cidade"><DInput value={f.cidade} onChange={e=>setF({...f,cidade:e.target.value})}/></DField>
+        <DField label="UF"><DInput maxLength={2} value={f.uf}
+          onChange={e=>setF({...f,uf:e.target.value.toUpperCase()})} placeholder="SP"/></DField>
+        <DField label="Unidades" error={errors.unitsTotal}>
+          <DInput type="number" value={f.unitsTotal} error={errors.unitsTotal}
+            onChange={e=>setF({...f,unitsTotal:e.target.value})} placeholder="120"/>
+        </DField>
+      </div>
+      <DField label="E-mail do síndico" error={errors.managerEmail}>
+        <DInput type="email" value={f.managerEmail} error={errors.managerEmail}
+          onChange={e=>setF({...f,managerEmail:e.target.value})} placeholder="sindico@condominio.com"/>
+      </DField>
+      <DField label="Plano">
+        <DSelect value={f.plan} onChange={e=>setF({...f,plan:e.target.value})} options={[
+          { value:"STARTER", label:"Starter — até 50 unidades · R$ 299/mês" },
+          { value:"PRO", label:"Pro — até 150 unidades · R$ 599/mês" },
+          { value:"ENTERPRISE", label:"Enterprise — acima de 150 · sob consulta" },
+        ]}/>
+      </DField>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <DField label="Data da assembleia" hint="Vazio = cadastra como pendente.">
+          <DInput type="date" value={f.assemblyDate} onChange={e=>setF({...f,assemblyDate:e.target.value})}/>
+        </DField>
+        <DField label="Quórum registrado">
+          <DInput value={f.assemblyQuorum} onChange={e=>setF({...f,assemblyQuorum:e.target.value})}
+            placeholder="2/3 — 86 de 120"/>
+        </DField>
+      </div>
+      <div style={{display:"flex",gap:10,marginTop:22}}>
+        <DButton variant="ghost" onClick={onClose} style={{flex:1,justifyContent:"center"}}>Cancelar</DButton>
+        <DButton variant="primary" loading={submit.loading} onClick={submit.execute}
+          style={{flex:2,justifyContent:"center"}}>Cadastrar</DButton>
+      </div>
+    </DModal>
+  );
+}
+
+function NewMerchantModal({ open, onClose }) {
+  const { notify } = useLife();
+  const [f, setF] = useState({ tradeName:"", legalName:"", cnpj:"", category:"RESTAURANT",
+    channel:"INTERNAL", addressFull:"", sacPhone:"", sacEmail:"", technicalResp:"",
+    commissionPct:"20", cashbackPct:"5", subscription:"299" });
+  const [errors, setErrors] = useState({});
+
+  const submit = useAction(async () => {
+    const e = {};
+    if (!f.tradeName.trim()) e.tradeName = "Informe o nome fantasia";
+    if (!f.legalName.trim()) e.legalName = "Informe a razão social";
+    if (!isValidCNPJ(f.cnpj)) e.cnpj = "CNPJ inválido";
+    if (!f.addressFull.trim()) e.addressFull = "Endereço obrigatório (CDC art. 31)";
+    if (!f.sacPhone.trim()) e.sacPhone = "Telefone de SAC obrigatório";
+    if (!isValidEmail(f.sacEmail)) e.sacEmail = "E-mail de SAC inválido";
+    setErrors(e);
+    if (Object.keys(e).length) { notify("Corrija os campos destacados","error"); return; }
+    notify("Anunciante cadastrado — aguardando assinatura do contrato","success");
+    onClose();
+  });
+
+  return (
+    <DModal open={open} onClose={onClose} title="Cadastrar anunciante"
+      subtitle="Dados do fornecedor ficam visíveis ao consumidor em todas as telas de compra.">
+      <DLegal icon="📋">
+        O art. 31 do CDC exige que razão social, CNPJ, endereço e canal de atendimento sejam
+        informados ao consumidor antes da compra. Estes campos são obrigatórios.
+      </DLegal>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <DField label="Nome fantasia" error={errors.tradeName}>
+          <DInput value={f.tradeName} error={errors.tradeName}
+            onChange={e=>setF({...f,tradeName:e.target.value})}/>
+        </DField>
+        <DField label="CNPJ" error={errors.cnpj}>
+          <DInput value={maskCNPJ(f.cnpj)} error={errors.cnpj}
+            onChange={e=>setF({...f,cnpj:e.target.value})}/>
+        </DField>
+      </div>
+      <DField label="Razão social" error={errors.legalName}>
+        <DInput value={f.legalName} error={errors.legalName}
+          onChange={e=>setF({...f,legalName:e.target.value})}/>
+      </DField>
+      <DField label="Endereço completo" error={errors.addressFull}>
+        <DInput value={f.addressFull} error={errors.addressFull}
+          onChange={e=>setF({...f,addressFull:e.target.value})}
+          placeholder="Rua, número, bairro, cidade/UF"/>
+      </DField>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <DField label="Telefone do SAC" error={errors.sacPhone}>
+          <DInput value={f.sacPhone} error={errors.sacPhone}
+            onChange={e=>setF({...f,sacPhone:e.target.value})}/>
+        </DField>
+        <DField label="E-mail do SAC" error={errors.sacEmail}>
+          <DInput type="email" value={f.sacEmail} error={errors.sacEmail}
+            onChange={e=>setF({...f,sacEmail:e.target.value})}/>
+        </DField>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <DField label="Categoria">
+          <DSelect value={f.category} onChange={e=>setF({...f,category:e.target.value})} options={[
+            {value:"RESTAURANT",label:"Restaurante"},{value:"PHARMACY",label:"Farmácia"},
+            {value:"GROCERY",label:"Mercado"},{value:"PET",label:"Pet"},
+            {value:"BEAUTY",label:"Beleza"},{value:"SERVICES",label:"Serviços"},
+          ]}/>
+        </DField>
+        <DField label="Canal">
+          <DSelect value={f.channel} onChange={e=>setF({...f,channel:e.target.value})} options={[
+            {value:"INTERNAL",label:"Interno (dentro do condomínio)"},
+            {value:"EXPRESS",label:"Express (bairro)"},
+          ]}/>
+        </DField>
+      </div>
+      <DField label="Responsável técnico"
+        hint="Obrigatório para farmácias (CRF), clínicas (CRM) e serviços regulamentados.">
+        <DInput value={f.technicalResp} onChange={e=>setF({...f,technicalResp:e.target.value})}
+          placeholder="Dr. Nome — CRF/SP 00000"/>
+      </DField>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <DField label="Comissão (%)"><DInput type="number" value={f.commissionPct}
+          onChange={e=>setF({...f,commissionPct:e.target.value})}/></DField>
+        <DField label="Cashback (%)"><DInput type="number" value={f.cashbackPct}
+          onChange={e=>setF({...f,cashbackPct:e.target.value})}/></DField>
+        <DField label="Mensalidade (R$)"><DInput type="number" value={f.subscription}
+          onChange={e=>setF({...f,subscription:e.target.value})}/></DField>
+      </div>
+      <div style={{display:"flex",gap:10,marginTop:22}}>
+        <DButton variant="ghost" onClick={onClose} style={{flex:1,justifyContent:"center"}}>Cancelar</DButton>
+        <DButton variant="primary" loading={submit.loading} onClick={submit.execute}
+          style={{flex:2,justifyContent:"center"}}>Cadastrar</DButton>
+      </div>
+    </DModal>
+  );
+}
+
+function ModerationModal({ open, onClose, report }) {
+  const { notify, setReports } = useLife();
+  const [decision, setDecision] = useState("UPHELD");
+  const [resolution, setResolution] = useState("");
+
+  const submit = useAction(async () => {
+    if (resolution.trim().length < 10) {
+      notify("Fundamente a decisão em ao menos 10 caracteres","error"); return;
+    }
+    setReports(r => r.filter(x => x.id !== report.id));
+    notify("Decisão registrada e comunicada às partes","success");
+    onClose(); setResolution("");
+  });
+
+  if (!report) return null;
+  return (
+    <DModal open={open} onClose={onClose} title="Analisar denúncia" subtitle={report.protocol}>
+      <DLegal icon="⚖️">
+        A decisão é registrada em log de auditoria e comunicada ao autor e a quem denunciou.
+        Remoções seguem o art. 19 do Marco Civil da Internet.
+      </DLegal>
+      <div style={{background:D.s2,borderRadius:12,padding:14,marginBottom:16}}>
+        <div style={{fontSize:11,color:D.muted,marginBottom:6}}>CONTEÚDO DENUNCIADO</div>
+        <p style={{fontSize:13.5,color:D.text,margin:"0 0 8px",lineHeight:1.55}}>{report.post.body}</p>
+        <div style={{fontSize:11.5,color:D.muted}}>
+          Motivo alegado: {report.reason} · por {report.reporter.fullName}
+        </div>
+      </div>
+      <DField label="Decisão">
+        <div style={{display:"flex",gap:10}}>
+          {[["UPHELD","Remover conteúdo",T.red],["DISMISSED","Manter publicado",T.green]].map(([v,l,c])=>(
+            <button key={v} onClick={()=>setDecision(v)} style={{flex:1,padding:12,borderRadius:12,
+              cursor:"pointer",fontSize:13,fontWeight:600,
+              border:`1.5px solid ${decision===v?c:D.border}`,
+              background:decision===v?c+"1A":D.s2,color:decision===v?c:D.muted}}>{l}</button>
+          ))}
+        </div>
+      </DField>
+      <DField label="Fundamentação" hint="Enviada às duas partes envolvidas.">
+        <DTextarea value={resolution} onChange={e=>setResolution(e.target.value)} rows={4}
+          placeholder="Descreva o critério aplicado e a regra violada ou respeitada."/>
+      </DField>
+      <div style={{display:"flex",gap:10,marginTop:22}}>
+        <DButton variant="ghost" onClick={onClose} style={{flex:1,justifyContent:"center"}}>Cancelar</DButton>
+        <DButton variant={decision==="UPHELD"?"red":"green"} loading={submit.loading}
+          onClick={submit.execute} style={{flex:2,justifyContent:"center"}}>Registrar decisão</DButton>
+      </div>
+    </DModal>
+  );
+}
+
+/* ═════════════════ PAINEL GERENCIAL ═════════════════ */
+const NAV_DESK = {
+  MANAGER: [
+    { group:"Principal", items:[
+      { id:"overview", icon:"📊", label:"Visão geral" },
+      { id:"invoices", icon:"📄", label:"Boletos" },
+      { id:"residents", icon:"👥", label:"Moradores" },
+    ]},
+    { group:"Operação", items:[
+      { id:"moderation", icon:"🛡️", label:"Moderação" },
+    ]},
+    { group:"Prestação de contas", items:[
+      { id:"finance", icon:"💰", label:"Financeiro" },
+      { id:"compliance", icon:"⚖️", label:"Conformidade" },
+    ]},
+  ],
+  PLATFORM_ADMIN: [
+    { group:"Plataforma", items:[
+      { id:"overview", icon:"🌐", label:"Visão global" },
+      { id:"condominiums", icon:"🏢", label:"Condomínios" },
+      { id:"merchants", icon:"🏪", label:"Anunciantes" },
+    ]},
+    { group:"Financeiro", items:[
+      { id:"finance", icon:"💰", label:"Receita" },
+    ]},
+    { group:"Governança", items:[
+      { id:"moderation", icon:"🛡️", label:"Moderação" },
+      { id:"privacy", icon:"🔒", label:"LGPD" },
+      { id:"compliance", icon:"⚖️", label:"Conformidade" },
+    ]},
+  ],
+  MERCHANT: [
+    { group:"Loja", items:[
+      { id:"overview", icon:"📊", label:"Visão geral" },
+      { id:"orders", icon:"📦", label:"Pedidos" },
+    ]},
+    { group:"Financeiro", items:[
+      { id:"finance", icon:"💰", label:"Faturamento" },
+      { id:"compliance", icon:"⚖️", label:"Conformidade" },
+    ]},
+  ],
+};
+
+function Dashboard({ onSwitchToMobile }) {
+  const { user, role, logout, reports } = useLife();
+  const [section, setSection] = useState("overview");
+  const [modal, setModal] = useState(null);
+  const [selReport, setSelReport] = useState(null);
+  const nav = NAV_DESK[role] || NAV_DESK.MANAGER;
+  const title = { MANAGER:"Painel do síndico", PLATFORM_ADMIN:"Administração LIFE",
+    MERCHANT:"Painel da loja" }[role];
+
+  return (
+    <div style={{display:"flex",height:"100dvh",background:D.bg,fontFamily:T.font,color:D.text}}>
+      <aside style={{width:238,background:D.s1,borderRight:`1px solid ${D.border}`,display:"flex",
+        flexDirection:"column",flexShrink:0,overflowY:"auto"}}>
+        <div style={{padding:"20px 18px 16px",borderBottom:`1px solid ${D.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+            <div style={{width:32,height:32,borderRadius:9,display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:16,
+              background:`linear-gradient(135deg,${T.accent},${T.accentD})`}}>💎</div>
+            <div style={{fontSize:18,fontWeight:800}}>LIFE</div>
+          </div>
+          <div style={{fontSize:11,color:D.muted}}>{title}</div>
+          <div style={{display:"flex",alignItems:"center",gap:9,marginTop:12,padding:"9px 11px",
+            background:D.s2,borderRadius:10,border:`1px solid ${D.border}`}}>
+            <Avatar name={user.fullName} size={28}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",
+                textOverflow:"ellipsis"}}>{user.fullName.split(" ")[0]}</div>
+              <div style={{fontSize:10,color:D.muted}}>{user.condominiumName}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{flex:1,padding:"8px 0"}}>
+          {nav.map(g => (
+            <div key={g.group} style={{padding:"10px 12px 4px"}}>
+              <div style={{fontSize:10,fontWeight:700,color:D.muted,textTransform:"uppercase",
+                letterSpacing:1.4,padding:"0 8px",marginBottom:5}}>{g.group}</div>
+              {g.items.map(item => {
+                const active = section === item.id;
+                const badge = item.id === "moderation" ? reports.length : 0;
+                return (
+                  <button key={item.id} onClick={()=>setSection(item.id)} style={{display:"flex",
+                    alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"9px 10px",
+                    borderRadius:10,cursor:"pointer",border:"none",fontSize:13.5,
+                    fontWeight:active?700:500,color:active?T.accentL:D.muted,
+                    background:active?"rgba(124,92,252,.15)":"transparent"}}>
+                    <span style={{fontSize:15,width:20,textAlign:"center"}}>{item.icon}</span>
+                    <span style={{flex:1}}>{item.label}</span>
+                    {badge > 0 && <span style={{background:T.red,color:"#fff",fontSize:10,
+                      fontWeight:700,padding:"2px 6px",borderRadius:20}}>{badge}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div style={{padding:12,borderTop:`1px solid ${D.border}`,display:"flex",
+          flexDirection:"column",gap:8}}>
+          <DButton variant="ghost" onClick={onSwitchToMobile} style={{width:"100%",justifyContent:"center"}}>
+            📱 Ver como app</DButton>
+          <button onClick={logout} style={{background:"none",border:"none",color:T.red,fontSize:13,
+            cursor:"pointer",padding:8,fontWeight:600}}>Sair</button>
+        </div>
+      </aside>
+
+      <main style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <header style={{display:"flex",alignItems:"center",gap:14,padding:"13px 24px",background:D.s1,
+          borderBottom:`1px solid ${D.border}`,flexShrink:0}}>
+          <div style={{fontSize:17,fontWeight:800,flex:1}}>
+            {nav.flatMap(g=>g.items).find(i=>i.id===section)?.label || title}</div>
+          <DInput placeholder="Buscar…" style={{width:230}}/>
+          {role === "MANAGER" && <DButton onClick={()=>setModal("invoice")}>+ Emitir boleto</DButton>}
+          {role === "PLATFORM_ADMIN" && (
+            <React.Fragment>
+              <DButton variant="ghost" onClick={()=>setModal("condo")}>+ Condomínio</DButton>
+              <DButton onClick={()=>setModal("merchant")}>+ Anunciante</DButton>
+            </React.Fragment>
+          )}
+        </header>
+        <div className="fade" style={{flex:1,overflowY:"auto",padding:24}}>
+          <DashSection id={section} role={role} openModal={setModal}
+            onSelectReport={r=>{setSelReport(r);setModal("moderation");}}/>
+        </div>
+      </main>
+
+      <IssueInvoiceModal open={modal==="invoice"} onClose={()=>setModal(null)}/>
+      <NewCondominiumModal open={modal==="condo"} onClose={()=>setModal(null)}/>
+      <NewMerchantModal open={modal==="merchant"} onClose={()=>setModal(null)}/>
+      <ModerationModal open={modal==="moderation"} report={selReport} onClose={()=>setModal(null)}/>
+    </div>
+  );
+}
+
+function DashSection({ id, role, openModal, onSelectReport }) {
+  const { reports, orders } = useLife();
+
+  if (id === "overview" && role === "MANAGER") {
+    const open = INVOICES.filter(i=>i.status!=="PAID");
+    const overdue = INVOICES.filter(i=>i.status==="OVERDUE");
+    return (
+      <React.Fragment>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20}}>
+          <KPI label="Inadimplência" value="12,5%" change="▼ 1,8% vs setembro"
+            sub="15 de 120 unidades" accent={T.red}/>
+          <KPI label="Receita do app" value={fmtBRL(482000)} change="▲ 18% vs setembro"
+            sub={`Repasse ao condomínio: ${fmtBRL(48200)}`} accent={T.green}/>
+          <KPI label="Em aberto" value={fmtBRL(open.reduce((s,i)=>s+i.amountCts,0))}
+            sub={`${open.length} boletos`} accent={T.yellow}/>
+          <KPI label="Moderação pendente" value={reports.length}
+            sub="Prazo interno de 48 horas" accent={T.orange}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16,marginBottom:16}}>
+          <Panel>
+            <SectionTitle sub="Receita repassada ao condomínio nos últimos meses">
+              Receita gerada pelo app</SectionTitle>
+            <Bars data={REVENUE_SERIES}/>
+            <div style={{display:"flex",gap:24,marginTop:14,paddingTop:14,
+              borderTop:`1px solid ${D.border}`}}>
+              {[["Acumulado",fmtBRL(1807000),D.text],["Repasse acumulado",fmtBRL(180700),T.green],
+                ["Cashback distribuído",fmtBRL(90300),T.accentL]].map(([l,v,c])=>(
+                <div key={l}>
+                  <div style={{fontSize:11,color:D.muted}}>{l}</div>
+                  <div style={{fontSize:17,fontWeight:800,color:c}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <DLegal icon="🏛️" tone="ok">
+              A receita repassada integra o balancete mensal e deve constar na prestação de contas
+              à assembleia, conforme art. 1.348, VIII do Código Civil.
+            </DLegal>
+          </Panel>
+          <Panel>
+            <SectionTitle>Ações rápidas</SectionTitle>
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              <DButton onClick={()=>openModal("invoice")} style={{justifyContent:"center"}}>Emitir boleto</DButton>
+              <DButton variant="ghost" style={{justifyContent:"center"}}>Publicar aviso</DButton>
+              <DButton variant="ghost" style={{justifyContent:"center"}}>Convocar assembleia</DButton>
+              <DButton variant="ghost" style={{justifyContent:"center"}}>Exportar balancete</DButton>
+            </div>
+          </Panel>
+        </div>
+        <Panel>
+          <SectionTitle sub="Toda cobrança exibe ao morador a base legal do rateio">
+            Boletos em aberto</SectionTitle>
+          <DTable columns={["Unidade","Descrição","Base legal","Valor","Vencimento","Situação"]}
+            rows={open.map(i=>[ i.unit.number, i.description,
+              <span style={{fontSize:11.5,color:D.muted}}>{i.legalBasis}</span>,
+              <strong>{fmtBRL(i.amountCts)}</strong>,
+              new Date(i.dueDate).toLocaleDateString("pt-BR"), <DBadge status={i.status}/> ])}/>
+        </Panel>
+      </React.Fragment>
+    );
+  }
+
+  if (id === "overview" && role === "PLATFORM_ADMIN") {
+    const pending = CONDOMINIUMS.filter(c=>c.contractStatus==="PENDING_ASSEMBLY");
+    const gmv = CONDOMINIUMS.reduce((s,c)=>s+c.gmvCts,0);
+    return (
+      <React.Fragment>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20}}>
+          <KPI label="GMV do mês" value={fmtBRL(gmv)} change="▲ 22% vs setembro"
+            sub={`${CONDOMINIUMS.length} condomínios`} accent={T.accent}/>
+          <KPI label="Receita LIFE" value={fmtBRL(gmv*0.2)} change="▲ 22%"
+            sub="20% de comissão" accent={T.green}/>
+          <KPI label="Repasses a condomínios" value={fmtBRL(gmv*0.02)} change="▲ 22%"
+            sub="10% da comissão" accent={T.orange}/>
+          <KPI label="Usuários ativos"
+            value={CONDOMINIUMS.reduce((s,c)=>s+c.users,0)} change="▲ 28 novos" accent={T.yellow}/>
+        </div>
+        {pending.length > 0 && (
+          <DLegal icon="🏛️" tone="warn">
+            {pending.length} condomínio com contrato pendente de assembleia ({pending.map(c=>c.name).join(", ")}).
+            O faturamento fica bloqueado até o registro da ata — art. 1.348 do Código Civil.
+          </DLegal>
+        )}
+        <Panel style={{marginBottom:16}}>
+          <SectionTitle sub="Situação contratual e volume por condomínio">Condomínios</SectionTitle>
+          <DTable columns={["Condomínio","Cidade","Unidades","GMV/mês","Plano","Contrato","Ata de assembleia"]}
+            rows={CONDOMINIUMS.map(c=>[
+              <strong>{c.name}</strong>, `${c.cidade}/${c.uf}`, c.unitsTotal,
+              c.gmvCts ? fmtBRL(c.gmvCts) : "—",
+              <DBadge color={T.accent}>{c.plan}</DBadge>,
+              <DBadge color={c.contractStatus==="ACTIVE"?T.green:T.yellow}>
+                {c.contractStatus==="ACTIVE"?"Vigente":"Pendente"}</DBadge>,
+              <span style={{fontSize:11.5,color:D.muted}}>
+                {c.assemblyDate ? `${new Date(c.assemblyDate).toLocaleDateString("pt-BR")} · ${c.assemblyQuorum}` : "Não registrada"}
+              </span>,
+            ])}/>
+        </Panel>
+      </React.Fragment>
+    );
+  }
+
+  if (id === "overview" && role === "MERCHANT") {
+    const mine = orders.filter(o=>o.merchant.tradeName==="Pizzaria do Zé");
+    return (
+      <React.Fragment>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20}}>
+          <KPI label="Recebido no mês" value={fmtBRL(1842000)} sub="Líquido, após comissão" accent={T.green}/>
+          <KPI label="Pedidos" value="342" change="▲ 12% vs setembro" accent={T.accent}/>
+          <KPI label="Avaliação" value="⭐ 4,8" sub="127 avaliações" accent={T.yellow}/>
+          <KPI label="Mensalidade" value="Em dia" sub="R$ 299 · vence 10/11" accent={T.orange}/>
+        </div>
+        <Panel>
+          <SectionTitle sub="O valor líquido já desconta a comissão da plataforma">
+            Pedidos recentes</SectionTitle>
+          <DTable columns={["Pedido","Cliente","Bruto","Comissão","Você recebe","Situação"]}
+            rows={mine.map(o=>[
+              <span style={{fontFamily:"monospace",fontSize:12}}>{o.reference}</span>,
+              o.user.fullName, fmtBRL(o.grossCts),
+              <span style={{color:D.muted}}>−{fmtBRL(o.commissionCts)}</span>,
+              <strong style={{color:T.green}}>{fmtBRL(o.merchantNetCts)}</strong>,
+              <DBadge status={o.status}/>,
+            ])} empty="Nenhum pedido ainda"/>
+        </Panel>
+      </React.Fragment>
+    );
+  }
+
+  if (id === "invoices") return (
+    <Panel>
+      <SectionTitle sub="Emissão processada por instituição autorizada pelo BACEN"
+        action={<DButton onClick={()=>openModal("invoice")}>+ Emitir boleto</DButton>}>Boletos</SectionTitle>
+      <DTable columns={["Unidade","Descrição","Base legal","Ata","Valor","Vencimento","Situação"]}
+        rows={INVOICES.map(i=>[ i.unit.number, i.description,
+          <span style={{fontSize:11.5,color:D.muted}}>{i.legalBasis}</span>,
+          <span style={{fontSize:11.5,color:D.muted}}>{i.assemblyRef || "—"}</span>,
+          <strong>{fmtBRL(i.amountCts)}</strong>,
+          new Date(i.dueDate).toLocaleDateString("pt-BR"), <DBadge status={i.status}/> ])}/>
+    </Panel>
+  );
+
+  if (id === "residents") return (
+    <Panel>
+      <SectionTitle sub="120 unidades · 98 moradores ativos no app">Moradores</SectionTitle>
+      <DTable columns={["Morador","Unidade","Tipo","Mérito","Boleto","Último acesso"]}
+        rows={[
+          [<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name="Lucas Ferreira" size={28}/>
+            <div><div style={{fontWeight:600}}>Lucas Ferreira</div>
+            <div style={{fontSize:11,color:D.muted}}>lucas@email.com</div></div></div>,
+            "304-B", <DBadge color={T.accent}>Proprietário</DBadge>, "💎 Ouro",
+            <DBadge status="OPEN"/>, "Hoje, 14:32"],
+          [<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name="Ana Costa" size={28} color={T.green}/>
+            <div><div style={{fontWeight:600}}>Ana Costa</div>
+            <div style={{fontSize:11,color:D.muted}}>ana@email.com</div></div></div>,
+            "102-A", <DBadge color={D.muted}>Inquilina</DBadge>, "💠 Prata",
+            <DBadge status="PAID"/>, "Hoje, 11:05"],
+          [<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name="Pedro Lima" size={28} color={T.orange}/>
+            <div><div style={{fontWeight:600}}>Pedro Lima</div>
+            <div style={{fontSize:11,color:D.muted}}>pedro@email.com</div></div></div>,
+            "215-A", <DBadge color={T.accent}>Proprietário</DBadge>, "💎 Ouro",
+            <DBadge status="OPEN"/>, "Ontem, 20:18"],
+          [<div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name="Roberto Silva" size={28} color="#9CA3AF"/>
+            <div><div style={{fontWeight:600}}>Roberto Silva</div>
+            <div style={{fontSize:11,color:D.muted}}>roberto@email.com</div></div></div>,
+            "201-A", <DBadge color={T.accent}>Proprietário</DBadge>, "🔶 Bronze",
+            <DBadge status="OVERDUE"/>, "15/10"],
+        ]}/>
+    </Panel>
+  );
+
+  if (id === "orders") return (
+    <Panel>
+      <SectionTitle sub="Split aplicado na origem pelo processador">Todos os pedidos</SectionTitle>
+      <DTable columns={["Pedido","Cliente","Bruto","Comissão","Condomínio","Você recebe","Situação"]}
+        rows={orders.map(o=>[
+          <span style={{fontFamily:"monospace",fontSize:12}}>{o.reference}</span>,
+          o.user.fullName, fmtBRL(o.grossCts),
+          <span style={{color:D.muted}}>−{fmtBRL(o.commissionCts)}</span>,
+          <span style={{color:T.orange}}>{fmtBRL(o.condoShareCts)}</span>,
+          <strong style={{color:T.green}}>{fmtBRL(o.merchantNetCts)}</strong>,
+          <DBadge status={o.status}/>,
+        ])}/>
+    </Panel>
+  );
+
+  if (id === "condominiums") return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:16}}>
+      {CONDOMINIUMS.map(c=>(
+        <Panel key={c.id}>
+          <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1.4,
+            marginBottom:4,color:c.contractStatus==="ACTIVE"?T.accentL:T.yellow}}>
+            {c.cidade} · {c.bairro}</div>
+          <div style={{fontSize:16,fontWeight:800,marginBottom:12}}>{c.name}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            {[["Unidades",c.unitsTotal],["Usuários",c.users],
+              ["GMV/mês",c.gmvCts?fmtBRL(c.gmvCts):"—"],["Inadimplência",`${c.inadimp}%`]].map(([l,v])=>(
+              <div key={l} style={{background:D.s2,borderRadius:10,padding:10}}>
+                <div style={{fontSize:11,color:D.muted}}>{l}</div>
+                <div style={{fontSize:17,fontWeight:800}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+            <DBadge color={T.accent}>{c.plan}</DBadge>
+            <DBadge color={c.contractStatus==="ACTIVE"?T.green:T.yellow}>
+              {c.contractStatus==="ACTIVE"?"Contrato vigente":"Aguardando ata"}</DBadge>
+          </div>
+          <div style={{fontSize:11.5,color:D.muted,marginBottom:12}}>
+            {c.assemblyDate
+              ? `Assembleia de ${new Date(c.assemblyDate).toLocaleDateString("pt-BR")} · ${c.assemblyQuorum}`
+              : "Sem ata registrada — faturamento bloqueado"}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <DButton variant="ghost" style={{flex:1,justifyContent:"center"}}>Editar</DButton>
+            <DButton variant="primary" style={{flex:1,justifyContent:"center"}}>Acessar</DButton>
+          </div>
+        </Panel>
+      ))}
+    </div>
+  );
+
+  if (id === "merchants") return (
+    <Panel>
+      <SectionTitle sub="Dados exibidos ao consumidor em todas as telas de compra"
+        action={<DButton onClick={()=>openModal("merchant")}>+ Anunciante</DButton>}>Anunciantes</SectionTitle>
+      <DTable columns={["Loja","CNPJ","Canal","SAC","Responsável técnico","Comissão","Situação"]}
+        rows={MERCHANTS.map(m=>[
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:18}}>{m.logoUrl}</span>
+            <div><div style={{fontWeight:600}}>{m.tradeName}</div>
+            <div style={{fontSize:11,color:D.muted}}>{m.legalName}</div></div>
+          </div>,
+          <span style={{fontFamily:"monospace",fontSize:12}}>{m.cnpj}</span>,
+          <DBadge color={m.channel==="INTERNAL"?T.green:T.orange}>
+            {m.channel==="INTERNAL"?"Interno":"Express"}</DBadge>,
+          <span style={{fontSize:12,color:D.muted}}>{m.sacPhone}</span>,
+          <span style={{fontSize:11.5,color:m.technicalResp?D.text:D.muted}}>
+            {m.technicalResp || "não exigido"}</span>,
+          `${m.commissionPct}%`, <DBadge color={T.green}>Ativo</DBadge>,
+        ])}/>
+    </Panel>
+  );
+
+  if (id === "moderation") return (
+    <React.Fragment>
+      <DLegal icon="🛡️">
+        Denúncias graves ocultam o conteúdo automaticamente até a revisão humana. Toda decisão é
+        registrada em log de auditoria e comunicada às partes, conforme o Marco Civil da Internet.
+      </DLegal>
+      <Panel>
+        <SectionTitle sub={`${reports.length} denúncia(s) aguardando análise · prazo interno de 48 horas`}>
+          Fila de moderação</SectionTitle>
+        <DTable columns={["Protocolo","Conteúdo","Motivo","Denunciante","Recebida em","Ação"]}
+          rows={reports.map(r=>[
+            <span style={{fontFamily:"monospace",fontSize:12}}>{r.protocol}</span>,
+            <span style={{display:"block",maxWidth:280,overflow:"hidden",textOverflow:"ellipsis",
+              whiteSpace:"nowrap"}}>{r.post.body}</span>,
+            <DBadge color={T.orange}>{r.reason}</DBadge>,
+            r.reporter.fullName, new Date(r.createdAt).toLocaleDateString("pt-BR"),
+            <DButton variant="ghost" onClick={()=>onSelectReport(r)}
+              style={{padding:"6px 12px",fontSize:12}}>Analisar</DButton>,
+          ])} empty="Nenhuma denúncia pendente — fila zerada"/>
+      </Panel>
+    </React.Fragment>
+  );
+
+  if (id === "privacy") return (
+    <React.Fragment>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20}}>
+        <KPI label="Solicitações abertas" value={DSAR.filter(d=>d.status!=="COMPLETED").length}
+          sub="Dentro do prazo" accent={T.accent}/>
+        <KPI label="Vencendo em 3 dias" value="1" sub="Requer atenção" accent={T.yellow}/>
+        <KPI label="Exclusões agendadas" value="1" sub="Rotina diária executa" accent={T.red}/>
+        <KPI label="Prazo médio" value="4 dias"
+          sub={`Limite legal: ${LEGAL.deadlines.dsarDays} dias`} accent={T.green}/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        <Panel>
+          <SectionTitle sub="Pedidos de titulares em andamento">Fila LGPD</SectionTitle>
+          <DTable columns={["Protocolo","Titular","Direito","Prazo","Situação"]}
+            rows={DSAR.map(d=>[
+              <span style={{fontFamily:"monospace",fontSize:12}}>{d.protocol}</span>,
+              d.user,
+              { PORTABILITY:"Portabilidade", DELETION:"Eliminação",
+                AUTOMATED_REVIEW:"Revisão automatizada" }[d.type],
+              new Date(d.dueAt).toLocaleDateString("pt-BR"),
+              <DBadge color={d.status==="COMPLETED"?T.green:T.yellow}>
+                {d.status==="COMPLETED"?"Concluída":"Em andamento"}</DBadge>,
+            ])}/>
+        </Panel>
+        <Panel>
+          <SectionTitle sub="Mantidos mesmo após pedido de exclusão">Retenção obrigatória</SectionTitle>
+          <DTable columns={["Dado","Prazo","Fundamento legal"]}
+            rows={RETENTION_RULES.map(r=>[ r.entity,
+              r.years?`${r.years} anos`:`${r.months} meses`,
+              <span style={{fontSize:11.5,color:D.muted}}>{r.basis}</span> ])}/>
+          <DLegal icon="🔒" tone="ok">
+            Dados retidos ficam bloqueados: acessíveis apenas para cumprir a obrigação legal que
+            justifica a guarda, sem nenhum outro tratamento.
+          </DLegal>
+        </Panel>
+      </div>
+    </React.Fragment>
+  );
+
+  if (id === "compliance") {
+    const checks = [
+      { area:"LGPD", item:"Encarregado (DPO) nomeado e publicado", detail:`${LEGAL.dpo.name} — ${LEGAL.dpo.email}` },
+      { area:"LGPD", item:"Consentimento granular por finalidade", detail:"Coletado no cadastro, revogável no Portal do Titular" },
+      { area:"LGPD", item:"Portabilidade e eliminação autoatendidas", detail:`Prazo de ${LEGAL.deadlines.dsarDays} dias, execução por rotina diária` },
+      { area:"LGPD", item:"Revisão de decisão automatizada", detail:"Critérios do perfilamento publicados no app" },
+      { area:"BACEN", item:"Pagamentos por instituição autorizada", detail:"Sem custódia de recursos pela plataforma" },
+      { area:"BACEN", item:"Dados de cartão tokenizados no cliente", detail:"Servidor nunca recebe PAN ou CVV" },
+      { area:"CDC", item:"Identificação do fornecedor antes da compra", detail:"Razão social, CNPJ, endereço e SAC — art. 31" },
+      { area:"CDC", item:"Direito de arrependimento em 7 dias", detail:"Informado no checkout e executável no app — art. 49" },
+      { area:"CDC", item:"SAC com protocolo e prazo", detail:`${LEGAL.sac.phone} — resposta em ${LEGAL.sac.responseDays} dias` },
+      { area:"Marco Civil", item:"Canal de denúncia e moderação", detail:"Decisão fundamentada e comunicada às partes" },
+      { area:"Marco Civil", item:"Guarda de registros de acesso", detail:`${LEGAL.deadlines.accessLogMonths} meses, com purga automática` },
+      { area:"Condominial", item:"Contrato aprovado em assembleia", detail:"Emissão bloqueada sem referência à ata" },
+      { area:"Condominial", item:"Receita na prestação de contas", detail:"Repasse exportável para o balancete" },
+    ];
+    const byArea = checks.reduce((m,c)=>{ (m[c.area] ||= []).push(c); return m; }, {});
+    return (
+      <React.Fragment>
+        <DLegal icon="⚖️">
+          Este painel espelha os controles implementados no produto. Documenta o que o sistema faz —
+          não substitui parecer jurídico nem auditoria independente.
+        </DLegal>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20}}>
+          {Object.entries(byArea).map(([area,items])=>(
+            <KPI key={area} label={area} value={`${items.length}/${items.length}`}
+              sub="controles ativos" accent={T.green}/>
+          ))}
+        </div>
+        {Object.entries(byArea).map(([area,items])=>(
+          <Panel key={area} style={{marginBottom:16}}>
+            <SectionTitle>{area}</SectionTitle>
+            <DTable columns={["Controle","Situação","Como está implementado"]}
+              rows={items.map(i=>[ i.item, <DBadge color={T.green}>Ativo</DBadge>,
+                <span style={{fontSize:12,color:D.muted}}>{i.detail}</span> ])}/>
+          </Panel>
+        ))}
+      </React.Fragment>
+    );
+  }
+
+  if (id === "finance") {
+    const segments = [
+      { label:"Repassado às lojas", value:80, color:T.green },
+      { label:"Comissão LIFE", value:13, color:T.accent },
+      { label:"Cashback", value:5, color:T.accentL },
+      { label:"Repasse condomínio", value:2, color:T.orange },
+    ];
+    const demo = computeSplit({ subtotalCts:10000, commissionPct:20, condoSharePct:10, cashbackPct:5 });
+    return (
+      <React.Fragment>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:20}}>
+          <KPI label="Volume transacionado" value={fmtBRL(8200000)} change="▲ 22%" accent={T.accent}/>
+          <KPI label="Comissão bruta" value={fmtBRL(1640000)} sub="20% do GMV" accent={T.green}/>
+          <KPI label="Repasse a condomínios" value={fmtBRL(164000)} sub="10% da comissão" accent={T.orange}/>
+          <KPI label="Cashback distribuído" value={fmtBRL(410000)} sub="Crédito não sacável" accent={T.accentL}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <Panel>
+            <SectionTitle sub="Divisão de cada R$ 100 transacionados">Composição do split</SectionTitle>
+            <div style={{display:"flex",alignItems:"center",gap:22}}>
+              <Donut segments={segments}/>
+              <div style={{flex:1,display:"flex",flexDirection:"column",gap:9}}>
+                {segments.map(s=>(
+                  <div key={s.label} style={{display:"flex",alignItems:"center",gap:9,fontSize:12.5}}>
+                    <span style={{width:10,height:10,borderRadius:3,background:s.color,flexShrink:0}}/>
+                    <span style={{flex:1,color:D.muted}}>{s.label}</span>
+                    <strong>{s.value}%</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{marginTop:16,paddingTop:14,borderTop:`1px solid ${D.border}`}}>
+              <div style={{fontSize:11.5,color:D.muted,marginBottom:8}}>
+                Exemplo verificado — compra de {fmtBRL(demo.grossCts)}:</div>
+              {[["Loja recebe",demo.merchantNetCts,T.green],["Comissão LIFE",demo.commissionCts,T.accent],
+                ["Condomínio",demo.condoShareCts,T.orange],["Cashback ao morador",demo.cashbackCts,T.accentL],
+                ["Líquido da plataforma",demo.platformNetCts,D.text]].map(([l,v,c])=>(
+                <div key={l} style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12.5}}>
+                  <span style={{color:D.muted}}>{l}</span>
+                  <strong style={{color:c}}>{fmtBRL(v)}</strong>
+                </div>
+              ))}
+              <div style={{marginTop:8,fontSize:11.5,color:T.green}}>
+                ✓ Invariante: loja + comissão = bruto ({demo.balanced ? "confere" : "erro"})
+              </div>
+            </div>
+          </Panel>
+          <Panel>
+            <SectionTitle sub="Fluxo do dinheiro na transação">Como o dinheiro circula</SectionTitle>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {[["1. Cobrança","O morador paga ao processador autorizado pelo BACEN. O LIFE não recebe o valor."],
+                ["2. Split automático","O processador divide na origem: loja e condomínio recebem direto."],
+                ["3. Cashback","Creditado como saldo promocional no LifeWallet, com validade de 12 meses."],
+                ["4. Prestação de contas","O repasse entra no balancete mensal levado à assembleia."]].map(([t,d])=>(
+                <div key={t}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.accentL,marginBottom:3}}>{t}</div>
+                  <div style={{fontSize:12.5,color:D.muted,lineHeight:1.55}}>{d}</div>
+                </div>
+              ))}
+            </div>
+            <DLegal icon="🏦" tone="ok">{LEGAL.disclaimers.notAFinancialInstitution}</DLegal>
+          </Panel>
+        </div>
+      </React.Fragment>
+    );
+  }
+
+  return (
+    <Panel style={{textAlign:"center",padding:"56px 20px"}}>
+      <div style={{fontSize:44,marginBottom:12}}>🚧</div>
+      <div style={{fontSize:17,fontWeight:700,marginBottom:6}}>Seção em construção</div>
+      <div style={{fontSize:13,color:D.muted}}>Esta área ainda não foi conectada aos dados.</div>
+    </Panel>
+  );
+}
+
+/* ═════════════════ SHELL RESPONSIVO ═════════════════ */
+const DESK_ROLES = ["MANAGER","PLATFORM_ADMIN","MERCHANT"];
+const NAV_MOBILE = {
+  RESIDENT: [
+    { id:"home", icon:"🏠", label:"Início" },
+    { id:"marketplace", icon:"🛍️", label:"Lojas" },
+    { id:"swap", icon:"🔄", label:"Trocas" },
+    { id:"social", icon:"💬", label:"Social" },
+    { id:"legal", icon:"⚖️", label:"Direitos" },
+  ],
+  MANAGER: [
+    { id:"home", icon:"🏠", label:"Início" },
+    { id:"invoices", icon:"📄", label:"Boletos" },
+    { id:"social", icon:"💬", label:"Social" },
+    { id:"legal", icon:"⚖️", label:"Direitos" },
+  ],
+  MERCHANT: [
+    { id:"home", icon:"🏠", label:"Início" },
+    { id:"marketplace", icon:"🛍️", label:"Loja" },
+    { id:"legal", icon:"⚖️", label:"Direitos" },
+  ],
+  PLATFORM_ADMIN: [
+    { id:"home", icon:"🏠", label:"Início" },
+    { id:"marketplace", icon:"🛍️", label:"Lojas" },
+    { id:"legal", icon:"⚖️", label:"Direitos" },
+  ],
+};
+
+function Frame({ isMobile, children }) {
+  return (
+    <div style={{minHeight:"100dvh",display:"flex",alignItems:isMobile?"stretch":"center",
+      justifyContent:"center",background:isMobile?T.bg:D.bg,padding:isMobile?0:20}}>
+      <div style={{width:isMobile?"100vw":420,height:isMobile?"100dvh":860,
+        borderRadius:isMobile?0:42,overflow:"hidden",position:"relative",background:T.bg,
+        display:"flex",flexDirection:"column",fontFamily:T.font,
+        boxShadow:isMobile?"none":"0 40px 100px rgba(0,0,0,.5)"}}>{children}</div>
+    </div>
+  );
+}
+
+function LifeApp() {
+  const { session, role, toast, dismissToast, cartTotals } = useLife();
+  const { isMobile, isDesktop } = useBreakpoint();
+  const [screen, setScreen] = useState("home");
+  const [stack, setStack] = useState([]);
+  const [forceMobile, setForceMobile] = useState(false);
+
+  useEffect(() => { if (isMobile) setForceMobile(false); }, [isMobile]);
+
+  const navigate = useCallback((to) => { setStack(s=>[...s,screen]); setScreen(to); }, [screen]);
+  const goBack = useCallback(() => {
+    setStack(s => { setScreen(s[s.length-1] || "home"); return s.slice(0,-1); });
+  }, []);
+  const goHome = useCallback(() => { setScreen("home"); setStack([]); }, []);
+
+  if (!session) return <Frame isMobile={isMobile}><AuthScreen/></Frame>;
+
+  const useDashboard = isDesktop && !forceMobile && DESK_ROLES.includes(role);
+  if (useDashboard) return <Dashboard onSwitchToMobile={()=>setForceMobile(true)}/>;
+
+  const navItems = NAV_MOBILE[role] || NAV_MOBILE.RESIDENT;
+  const showNav = navItems.some(i => i.id === screen);
+
+  const screens = {
+    home:           <HomeScreen navigate={navigate}/>,
+    marketplace:    <MarketplaceScreen navigate={navigate} onHome={goHome}/>,
+    cart:           <CartScreen onBack={goBack} onHome={goHome} onCheckout={()=>navigate("checkout")}/>,
+    checkout:       <CheckoutScreen onBack={goBack} onHome={goHome} onDone={goHome}/>,
+    wallet:         <WalletScreen onBack={goBack} onHome={goHome}/>,
+    invoices:       <InvoicesScreen onBack={goBack} onHome={goHome}/>,
+    social:         <SocialScreen onHome={goHome}/>,
+    swap:           <SwapScreen onHome={goHome}/>,
+    legal:          <LegalHub navigate={navigate} onBack={goBack}/>,
+    privacy_portal: <PrivacyPortal onBack={goBack} onHome={goHome}/>,
+    terms:          <DocumentScreen kind="terms" onBack={goBack} onHome={goHome}/>,
+    privacy:        <DocumentScreen kind="privacy" onBack={goBack} onHome={goHome}/>,
+    support:        <SupportScreen onBack={goBack} onHome={goHome}/>,
+    withdrawal:     <WithdrawalScreen onBack={goBack} onHome={goHome}/>,
+  };
+
+  return (
+    <Frame isMobile={isMobile}>
+      {isDesktop && forceMobile && DESK_ROLES.includes(role) && (
+        <button onClick={()=>setForceMobile(false)} style={{background:T.accent,border:"none",
+          color:"#fff",padding:"9px 16px",fontSize:12.5,fontWeight:700,cursor:"pointer",
+          flexShrink:0}}>💻 Voltar ao painel gerencial</button>
+      )}
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",position:"relative"}}>
+        {screens[screen] || (
+          <Empty icon="🚧" title="Tela em construção"
+            sub="Esta área faz parte do escopo e será conectada na implementação."
+            action={<Button variant="primary" onClick={goHome}>Voltar ao início</Button>}/>
+        )}
+        <Toast message={toast?.message} tone={toast?.tone} onDone={dismissToast}/>
+      </div>
+      {showNav && (
+        <nav style={{background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",
+          padding:"6px 4px calc(10px + env(safe-area-inset-bottom))",flexShrink:0,
+          boxShadow:"0 -4px 20px rgba(0,0,0,.07)",zIndex:60}}>
+          {navItems.map(item => {
+            const active = screen === item.id;
+            const badge = item.id === "marketplace" ? cartTotals.count : 0;
+            return (
+              <button key={item.id} onClick={()=>{setScreen(item.id);setStack([]);}}
+                style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",
+                  flexDirection:"column",alignItems:"center",gap:2,padding:"4px 2px",position:"relative"}}>
+                <div style={{width:active?40:34,height:active?40:34,borderRadius:active?13:10,
+                  background:active?T.accent:"transparent",display:"flex",alignItems:"center",
+                  justifyContent:"center",fontSize:active?19:17,transition:"all .18s",
+                  opacity:active?1:.55,boxShadow:active?`0 4px 12px ${T.accent}44`:"none"}}>
+                  {item.icon}</div>
+                {badge > 0 && (
+                  <span style={{position:"absolute",top:0,right:"22%",background:T.red,color:"#fff",
+                    fontSize:9,fontWeight:700,borderRadius:10,padding:"1px 5px",minWidth:14}}>{badge}</span>
+                )}
+                <span style={{fontSize:9,fontWeight:active?700:500,
+                  color:active?T.accent:T.muted}}>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+    </Frame>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <LifeProvider><LifeApp/></LifeProvider>
+);
+</script>
+</body>
+</html>
