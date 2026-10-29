@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800;9..40,900&display=swap" rel="stylesheet"/>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;background:#0B0C14;min-height:100dvh}
+  body{background:#F4F5FA;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;min-height:100dvh}
   #root{min-height:100dvh}
   input,textarea,select,button{font-family:inherit}
   @keyframes lifeShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
@@ -18,14 +18,98 @@
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:rgba(120,120,140,.35);border-radius:4px}
 </style>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+  window.__LIFE__ = { errors: [] };
+  window.addEventListener("error", function (e) {
+    window.__LIFE__.errors.push(e.message + (e.filename ? " @ " + e.filename + ":" + e.lineno : ""));
+    if (window.__lifeShowError) window.__lifeShowError();
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    window.__LIFE__.errors.push("Promise: " + (e.reason && e.reason.message || e.reason));
+    if (window.__lifeShowError) window.__lifeShowError();
+  });
+</script>
+<script>
+  // Carrega cada biblioteca do jsDelivr e cai para o unpkg se falhar.
+  (function () {
+    var LIBS = [
+      ["React",    "https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js",
+                   "https://unpkg.com/react@18.3.1/umd/react.production.min.js"],
+      ["ReactDOM", "https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js",
+                   "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"],
+      ["Babel",    "https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.4/babel.min.js",
+                   "https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"]
+    ];
+    var i = 0;
+    function load(src, onOk, onFail) {
+      var s = document.createElement("script");
+      s.src = src; s.async = false;
+      s.onload = onOk; s.onerror = onFail;
+      document.head.appendChild(s);
+    }
+    function next() {
+      if (i >= LIBS.length) { window.__lifeLibsReady = true; document.dispatchEvent(new Event("life:ready")); return; }
+      var lib = LIBS[i];
+      load(lib[1], function () { i++; next(); }, function () {
+        load(lib[2], function () { i++; next(); }, function () {
+          window.__LIFE__.errors.push("Não foi possível carregar " + lib[0] + ". Verifique a conexão ou algum bloqueador de scripts.");
+          if (window.__lifeShowError) window.__lifeShowError();
+        });
+      });
+    }
+    next();
+  })();
+</script>
 </head>
 <body>
-<div id="root"></div>
+<div id="root">
+  <div id="life-boot" style="min-height:100dvh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-family:'DM Sans',sans-serif;color:#6B7280;background:#F4F5FA">
+    <div style="font-size:46px">💎</div>
+    <div style="font-weight:800;font-size:26px;color:#0F0E2A;letter-spacing:-1px">LIFE</div>
+    <div style="font-size:13px">Compilando a interface…</div>
+    <div style="font-size:11.5px;opacity:.65;max-width:280px;text-align:center;line-height:1.5">A primeira abertura leva alguns segundos</div>
+  </div>
+</div>
+<div id="life-error" style="display:none;position:fixed;inset:0;z-index:9999;background:#12131F;color:#F0F0FF;font-family:'DM Sans',sans-serif;padding:28px;overflow:auto">
+  <div style="max-width:680px;margin:0 auto">
+    <div style="font-size:34px;margin-bottom:10px">⚠️</div>
+    <h1 style="font-size:20px;font-weight:800;margin:0 0 8px">A interface não carregou</h1>
+    <p style="font-size:13.5px;color:#7B7D9E;line-height:1.6;margin:0 0 18px">
+      A página depende de React e Babel vindos de um CDN. Se a rede, uma extensão ou a
+      política da empresa bloquear esses domínios, nada é renderizado.
+    </p>
+    <pre id="life-error-log" style="background:#0B0C14;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:#FF7A7A"></pre>
+    <p style="font-size:12.5px;color:#7B7D9E;line-height:1.6;margin:18px 0 0">
+      Domínios que precisam estar liberados:<br>
+      <code style="color:#B8A9FD">cdn.jsdelivr.net</code> e <code style="color:#B8A9FD">unpkg.com</code>
+    </p>
+  </div>
+</div>
+<script>
+  window.__lifeShowError = function () {
+    var box = document.getElementById("life-error");
+    var log = document.getElementById("life-error-log");
+    if (!box || !log) return;
+    log.textContent = window.__LIFE__.errors.join("\n\n") || "Erro desconhecido.";
+    box.style.display = "block";
+  };
+  // Se em 20 s nada montou, mostra o diagnóstico em vez de uma tela vazia.
+  setTimeout(function () {
+    var boot = document.getElementById("life-boot");
+    if (boot && boot.isConnected) {
+      if (!window.__LIFE__.errors.length) {
+        window.__LIFE__.errors.push(
+          (!window.React ? "React não carregou. " : "") +
+          (!window.Babel ? "Babel não carregou. " : "") +
+          "A compilação não terminou em 20 segundos."
+        );
+      }
+      window.__lifeShowError();
+    }
+  }, 20000);
+</script>
 
-<script type="text/babel" data-presets="react">
+<script type="text/plain" id="life-source">
 const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
 
 /* ═════════════════ TOKENS ═════════════════ */
@@ -3303,9 +3387,27 @@ function LifeApp() {
   );
 }
 
+const bootEl = document.getElementById("life-boot");
+if (bootEl) bootEl.remove();
 ReactDOM.createRoot(document.getElementById("root")).render(
   <LifeProvider><LifeApp/></LifeProvider>
 );
+</script>
+<script>
+  (function () {
+    function run() {
+      try {
+        var src = document.getElementById("life-source").textContent;
+        var out = Babel.transform(src, { presets: ["react"] }).code;
+        (0, eval)(out);
+      } catch (err) {
+        window.__LIFE__.errors.push((err && err.message) || String(err));
+        window.__lifeShowError();
+      }
+    }
+    if (window.__lifeLibsReady) run();
+    else document.addEventListener("life:ready", run);
+  })();
 </script>
 </body>
 </html>
